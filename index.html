@@ -226,29 +226,78 @@ function parseRaceNo(lines){
 }
 
 function parseMeta(lines){
- const joined=lines.join(' ');
+  const date=parseDate(lines);
+  const raceNo=parseRaceNo(lines);
 
- const date=parseDate(lines);
- const raceNo=parseRaceNo(lines);
+  let venue='';
 
-let venue='';
+  // 「7回 名古屋 3日目」のような開催情報を最優先
+  for(const s of lines){
+    const m=s.match(
+      /^\d+回\s+(名古屋|園田|門別|船橋|大井|金沢|高知|佐賀|笠松|姫路|盛岡|水沢|浦和|川崎|帯広)\s+\d+日目/
+    );
 
-for(let i=0;i<Math.min(lines.length,80);i++){
-  const s=lines[i];
-
-  if(/^(名古屋|園田|門別|船橋|大井|金沢|高知|佐賀|笠松|姫路|盛岡|水沢|浦和|川崎|帯広)$/.test(s)){
-    venue=s;
-    break;
+    if(m){
+      venue=m[1];
+      break;
+    }
   }
 
- const m=s.match(
-  /^(?:\d+回\s*)?(名古屋|園田|門別|船橋|大井|金沢|高知|佐賀|笠松|姫路|盛岡|水沢|浦和|川崎|帯広)(?=\s|$)/
-);
+  // 開催行が無い場合は「発走」周辺だけを見る
+  if(!venue){
+    const hi=lines.findIndex(x=>/発走/.test(x));
 
-  if(m){
-    venue=m[1];
-    break;
+    if(hi>=0){
+      const near=lines.slice(
+        Math.max(0,hi-5),
+        Math.min(lines.length,hi+8)
+      );
+
+      for(const s of near){
+        const m=s.match(
+          /(名古屋|園田|門別|船橋|大井|金沢|高知|佐賀|笠松|姫路|盛岡|水沢|浦和|川崎|帯広)/
+        );
+
+        if(m){
+          venue=m[1];
+          break;
+        }
+      }
+    }
   }
+
+  const joined=lines.join(' ');
+
+  // \b を外して日本語の「ダ1500m」等を確実に取得
+  const sd=joined.match(
+    /(芝|ダ|障)\s*(\d{3,4})m/
+  );
+
+  const going=(
+    joined.match(
+      /(?:馬場|馬場状態)[:：]?\s*(良|稍重|重|不良|稍|不)/
+    )||[]
+  )[1]||'';
+
+  let className='';
+
+  const hi=lines.findIndex(x=>/発走/.test(x));
+
+  if(hi>0){
+    className=norm(
+      lines[hi-1].replace(/^\d{1,2}R\s*/,'')
+    );
+  }
+
+  return {
+    date,
+    venue,
+    raceNo,
+    surface:sd?sd[1]:'',
+    distance:sd?Number(sd[2]):null,
+    going,
+    className
+  };
 }
 
  const sd=joined.match(/\b(芝|ダ|障)\s*(\d{3,4})m/);
