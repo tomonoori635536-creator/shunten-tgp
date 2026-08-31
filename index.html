@@ -231,11 +231,25 @@ function parseMeta(lines){
  const date=parseDate(lines);
  const raceNo=parseRaceNo(lines);
 
- const venue=(
-  joined.match(
-   /(名古屋|園田|門別|船橋|大井|金沢|高知|佐賀|笠松|姫路|盛岡|水沢|浦和|川崎|帯広)/
-  )||[]
- )[1]||'';
+let venue='';
+
+for(let i=0;i<Math.min(lines.length,80);i++){
+  const s=lines[i];
+
+  if(/^(名古屋|園田|門別|船橋|大井|金沢|高知|佐賀|笠松|姫路|盛岡|水沢|浦和|川崎|帯広)$/.test(s)){
+    venue=s;
+    break;
+  }
+
+ const m=s.match(
+  /^(?:\d+回\s*)?(名古屋|園田|門別|船橋|大井|金沢|高知|佐賀|笠松|姫路|盛岡|水沢|浦和|川崎|帯広)(?=\s|$)/
+);
+
+  if(m){
+    venue=m[1];
+    break;
+  }
+}
 
  const sd=joined.match(/\b(芝|ダ|障)\s*(\d{3,4})m/);
 
