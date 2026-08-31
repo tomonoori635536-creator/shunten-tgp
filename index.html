@@ -88,17 +88,28 @@ function parseDate(lines){
 
   const year=Number($('year').value)||new Date().getFullYear();
   const head=headerWindow(lines);
-  const nav=[];
 
-  for(const s of head){
-    const m=s.match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
-    if(m) nav.push([+m[1],+m[2]]);
+  // 日付ナビに「本日へ」がある場合、その直前の日付を開催日として扱う。
+  // これで単純に中央を選んでしまう誤判定を避ける。
+  const todayIdx=head.findIndex(x=>x==='本日へ');
+  if(todayIdx>0){
+    for(let i=todayIdx-1;i>=0;i--){
+      const m=head[i].match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
+      if(m){
+        return `${year}/${String(+m[1]).padStart(2,'0')}/${String(+m[2]).padStart(2,'0')}`;
+      }
+    }
   }
 
-  if(nav.length){
-    const mid=nav[Math.floor(nav.length/2)];
+  // フォールバック: 発走より前にある最後の日付候補を使う。
+  let candidate=null;
+  for(const s of head){
+    const m=s.match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
+    if(m) candidate=[+m[1],+m[2]];
+  }
 
-    return `${year}/${String(mid[0]).padStart(2,'0')}/${String(mid[1]).padStart(2,'0')}`;
+  if(candidate){
+    return `${year}/${String(candidate[0]).padStart(2,'0')}/${String(candidate[1]).padStart(2,'0')}`;
   }
 
   return '';
