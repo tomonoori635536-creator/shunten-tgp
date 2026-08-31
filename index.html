@@ -5,218 +5,814 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>鞍上パターン帳 × 瞬天 TGP ENGINE</title>
 <style>
-*{box-sizing:border-box}
-body{
-  margin:0;
-  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
-  background:#f4f6f8;
-  color:#18212b;
-}
-header{
-  background:#101820;
-  color:white;
-  padding:20px;
-}
-header h1{margin:0;font-size:24px}
-header p{margin:6px 0 0;color:#b8c5d1}
-nav{
-  display:flex;
-  gap:8px;
-  padding:12px;
-  background:white;
-  border-bottom:1px solid #ddd;
-  overflow-x:auto;
-}
-nav button{
-  border:1px solid #ccd3da;
-  background:#fff;
-  padding:10px 14px;
-  border-radius:8px;
-  cursor:pointer;
-  white-space:nowrap;
-}
-nav button.active{
-  background:#101820;
-  color:white;
-}
-main{
-  max-width:1200px;
-  margin:20px auto;
-  padding:0 15px;
-}
-.panel{
-  display:none;
-  background:white;
-  border:1px solid #dce1e5;
-  border-radius:12px;
-  padding:20px;
-  box-shadow:0 2px 8px rgba(0,0,0,.04);
-}
-.panel.active{display:block}
-textarea{
-  width:100%;
-  min-height:300px;
-  padding:12px;
-  border:1px solid #ccd3da;
-  border-radius:8px;
-  resize:vertical;
-}
-.action{
-  margin-top:12px;
-  padding:11px 18px;
-  border:0;
-  border-radius:8px;
-  background:#101820;
-  color:white;
-  cursor:pointer;
-}
-.status{
-  margin-top:15px;
-  padding:12px;
-  background:#eef3f7;
-  border-radius:8px;
-}
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-  gap:12px;
-}
-.card{
-  padding:16px;
-  border:1px solid #dce1e5;
-  border-radius:10px;
-}
-.big{font-size:28px;font-weight:700}
-.good{color:#16834a}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f4f6f8;color:#18212b}header{background:#101820;color:#fff;padding:18px 20px}header h1{margin:0;font-size:24px}header p{margin:6px 0 0;color:#b8c5d1}nav{display:flex;gap:8px;padding:12px;background:#fff;border-bottom:1px solid #ddd;overflow-x:auto}nav button{border:1px solid #ccd3da;background:#fff;padding:10px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}nav button.active{background:#101820;color:#fff}main{max-width:1200px;margin:20px auto;padding:0 15px}.panel{display:none;background:#fff;border:1px solid #dce1e5;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.04)}.panel.active{display:block}textarea{width:100%;min-height:300px;padding:12px;border:1px solid #ccd3da;border-radius:8px;resize:vertical}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.action,.secondary,.danger{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;cursor:pointer}.action{background:#101820;color:#fff}.secondary{background:#e9eef2}.danger{background:#8e1b1b;color:#fff}.status{margin-top:15px;padding:12px;background:#eef3f7;border-radius:8px;white-space:pre-wrap}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{padding:16px;border:1px solid #dce1e5;border-radius:10px}.big{font-size:28px;font-weight:700}.good{color:#16834a}.warn{color:#a65a00}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}th,td{border-bottom:1px solid #e5e9ec;padding:8px;text-align:left}th{background:#f7f9fa;position:sticky;top:0}.tablewrap{overflow:auto;max-height:520px}.muted{color:#66727d;font-size:13px}input,select{padding:8px;border:1px solid #ccd3da;border-radius:7px}
 </style>
 </head>
-
 <body>
 
 <header>
-  <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-  <p>騎手パターン・馬能力・TGP・時系列バックテスト</p>
+<h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
+<p>騎手パターン・馬能力・TGP・時系列バックテスト</p>
 </header>
 
 <nav>
-  <button class="tab active" data-tab="input">データ入力</button>
-  <button class="tab" data-tab="jockeys">騎手一覧</button>
-  <button class="tab" data-tab="detail">騎手詳細</button>
-  <button class="tab" data-tab="horses">馬データ</button>
-  <button class="tab" data-tab="prediction">統合予想</button>
-  <button class="tab" data-tab="verify">検証・答え合わせ</button>
+<button class="tab active" data-tab="input">データ入力</button>
+<button class="tab" data-tab="jockeys">騎手一覧</button>
+<button class="tab" data-tab="detail">騎手詳細</button>
+<button class="tab" data-tab="horses">馬データ</button>
+<button class="tab" data-tab="prediction">統合予想</button>
+<button class="tab" data-tab="verify">検証・答え合わせ</button>
 </nav>
 
 <main>
 
 <section id="input" class="panel active">
-  <h2>データ入力</h2>
-  <p>netkeiba / NAR の出馬表・結果をそのまま貼り付けます。</p>
+<h2>データ入力</h2>
+<p>netkeiba / NAR の結果ページをそのまま貼り付けます。取消は騎手学習から除外します。</p>
 
-  <textarea id="raceInput"
-    placeholder="ここにレースデータを貼り付け"></textarea>
+<div class="row">
+<label>データ収集年
+<input id="collectionYear" type="number" min="2000" max="2100" style="width:100px">
+</label>
+<span class="muted">MM/DDしかないページの日付補完に使います</span>
+</div>
 
-  <button class="action" onclick="saveDraft()">入力を保存</button>
+<textarea id="raceInput" placeholder="ここにレース結果を貼り付け"></textarea>
 
-  <div class="status" id="saveStatus">
-    Web版の保存領域を確認中…
-  </div>
+<div class="row">
+<button class="action" onclick="parseNow()">今すぐ読み取る</button>
+<button class="action" onclick="saveParsed()">この結果を保存</button>
+<button class="secondary" onclick="exportData()">JSON書き出し</button>
+
+<label class="secondary" style="display:inline-block">
+JSON読込
+<input id="jsonFile" type="file" accept="application/json" style="display:none" onchange="importData(event)">
+</label>
+
+<button class="secondary" onclick="deleteLastRace()">最後のレースを削除</button>
+</div>
+
+<div class="status" id="parseStatus">Web版は正常に動作しています。</div>
+<div id="preview"></div>
 </section>
 
 <section id="jockeys" class="panel">
-  <h2>騎手一覧</h2>
-  <div class="grid">
-    <div class="card">
-      <div class="big" id="jockeyCount">0</div>
-      <div>登録騎手</div>
-    </div>
-    <div class="card">
-      <div class="big" id="rideCount">0</div>
-      <div>学習騎乗数</div>
-    </div>
-  </div>
-  <p>次の段階で条件別の勝率・複勝率を接続します。</p>
+<h2>騎手一覧</h2>
+<div class="grid">
+<div class="card"><div class="big" id="raceCount">0</div><div>保存レース</div></div>
+<div class="card"><div class="big" id="jockeyCount">0</div><div>登録騎手</div></div>
+<div class="card"><div class="big" id="rideCount">0</div><div>学習騎乗数</div></div>
+</div>
+<div class="tablewrap"><table id="jockeyTable"></table></div>
 </section>
 
 <section id="detail" class="panel">
-  <h2>騎手詳細</h2>
-  <p>開催場・人気・馬番・距離・馬場・クラス別パターンを表示します。</p>
+<h2>騎手詳細</h2>
+<div class="row">
+<select id="jockeySelect" onchange="renderJockeyDetail()"></select>
+</div>
+<div id="jockeyDetail"></div>
 </section>
 
 <section id="horses" class="panel">
-  <h2>馬データ</h2>
-  <p>過去走・コース適性・距離適性・近走内容を学習します。</p>
+<h2>馬データ</h2>
+<p>保存結果から馬名ごとの走数・勝率・複勝率を表示します。</p>
+<div class="tablewrap"><table id="horseTable"></table></div>
 </section>
 
 <section id="prediction" class="panel">
-  <h2>統合予想</h2>
-  <div class="grid">
-    <div class="card">
-      <strong>馬能力</strong>
-      <div class="big">80%</div>
-    </div>
-    <div class="card">
-      <strong>騎手</strong>
-      <div class="big">20%</div>
-    </div>
-  </div>
-  <p>現在の時系列検証で有力だった80:20を仮表示しています。</p>
+<h2>統合予想</h2>
+<div class="grid">
+<div class="card"><strong>馬能力</strong><div class="big">80%</div></div>
+<div class="card"><strong>騎手</strong><div class="big">20%</div></div>
+</div>
+<p>出馬表の自動読取と統合スコアは次段階で接続します。</p>
 </section>
 
 <section id="verify" class="panel">
-  <h2>🔒 時系列バックテスト</h2>
-  <p>対象レースより前の日付のデータだけを使って検証します。</p>
-  <div class="status good">
-    未来データを使わない検証方式
-  </div>
+<h2>🔒 時系列バックテスト</h2>
+<p>対象レースより前の日付のデータだけを使う方式を次段階で復旧します。</p>
+<div class="status good">未来データを使わない方針は維持します。</div>
 </section>
 
 </main>
 
 <script>
 const KEY='jockeyPatternBook_v2';
+const YEAR_KEY='jockeyPatternBook_collectionYear';
 
-document.querySelectorAll('.tab').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+let parsed=null;
+let state=loadState();
 
-    btn.classList.add('active');
-    document.getElementById(btn.dataset.tab).classList.add('active');
+function emptyState(){
+ return {
+  history:[],
+  races:[],
+  horseHistory:[],
+  raceCards:[],
+  evaluations:[],
+  model:{}
+ };
+}
+
+function loadState(){
+ try{
+  const x=JSON.parse(localStorage.getItem(KEY)||'null');
+  return x&&typeof x==='object'
+   ?Object.assign(emptyState(),x)
+   :emptyState();
+ }catch(e){
+  return emptyState();
+ }
+}
+
+function persist(){
+ localStorage.setItem(KEY,JSON.stringify(state));
+}
+
+function norm(s){
+ return String(s||'').replace(/\s+/g,' ').trim();
+}
+
+function linesOf(raw){
+ return String(raw||'')
+  .replace(/\r/g,'')
+  .split('\n')
+  .map(x=>x.trim())
+  .filter(Boolean);
+}
+
+function isRank(s){
+ return /^(?:[1-9]|1\d|2\d|3\d)$/.test(s);
+}
+
+function isHorseNo(s){
+ return /^(?:[1-9]|1\d|2\d)$/.test(s);
+}
+
+function isSexAge(s){
+ return /^(牡|牝|セ)\d+/.test(s);
+}
+
+function isWeight(s){
+ return /^\d{2,3}(?:\.\d)?$/.test(s);
+}
+
+function isTime(s){
+ return /^\d+:\d{2}(?:\.\d)?$/.test(s);
+}
+
+function parseDate(lines){
+ const year=
+  Number(document.getElementById('collectionYear').value)
+  ||new Date().getFullYear();
+
+ const nav=[];
+ let active=false;
+
+ for(const s of lines){
+  if(s==='前'){
+   active=true;
+   continue;
+  }
+
+  if(active&&(s==='本日へ'||s==='次'))break;
+
+  if(active){
+   const m=s.match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
+   if(m)nav.push([+m[1],+m[2]]);
+  }
+ }
+
+ if(nav.length){
+  const mid=nav[Math.floor(nav.length/2)];
+
+  return `${year}/${String(mid[0]).padStart(2,'0')}/${String(mid[1]).padStart(2,'0')}`;
+ }
+
+ const full=lines.join(' ').match(
+  /(20\d{2})[./年](\d{1,2})[./月](\d{1,2})/
+ );
+
+ if(full){
+  return `${full[1]}/${String(full[2]).padStart(2,'0')}/${String(full[3]).padStart(2,'0')}`;
+ }
+
+ return '';
+}
+
+function parseRaceNo(lines){
+ const navIdx=lines.findIndex(x=>x==='12R');
+
+ if(navIdx>=0){
+  for(let i=navIdx+1;i<Math.min(lines.length,navIdx+20);i++){
+   if(/^\d{1,2}R$/.test(lines[i])){
+    return Number(lines[i].replace('R',''));
+   }
+  }
+ }
+
+ for(let i=0;i<lines.length;i++){
+  if(
+   /^\d{1,2}R$/.test(lines[i])
+   &&
+   lines.slice(i+1,i+4).some(x=>/発走/.test(x))
+  ){
+   return Number(lines[i].replace('R',''));
+  }
+ }
+
+ return null;
+}
+
+function parseMeta(lines){
+ const joined=lines.join(' ');
+
+ const date=parseDate(lines);
+ const raceNo=parseRaceNo(lines);
+
+ const venue=(
+  joined.match(
+   /(名古屋|園田|門別|船橋|大井|金沢|高知|佐賀|笠松|姫路|盛岡|水沢|浦和|川崎|帯広)/
+  )||[]
+ )[1]||'';
+
+ const sd=joined.match(/\b(芝|ダ|障)\s*(\d{3,4})m/);
+
+ const going=(
+  joined.match(
+   /(?:馬場|馬場状態)[:：]?\s*(良|稍重|重|不良|稍|不)/
+  )||[]
+ )[1]||'';
+
+ let className='';
+
+ const hi=lines.findIndex(x=>/発走/.test(x));
+
+ if(hi>0){
+  className=norm(
+   lines[hi-1].replace(/^\d{1,2}R\s*/,'')
+  );
+ }
+
+ return {
+  date,
+  venue,
+  raceNo,
+  surface:sd?sd[1]:'',
+  distance:sd?Number(sd[2]):null,
+  going,
+  className
+ };
+}
+
+function parseRows(lines){
+ const rows=[];
+ const cancelNames=new Set();
+
+ for(let i=0;i<lines.length;i++){
+  if(lines[i]==='取消'&&lines[i+3]){
+   cancelNames.add(lines[i+3]);
+  }
+ }
+
+ for(let i=0;i<lines.length-8;i++){
+
+  if(!isRank(lines[i])||!isHorseNo(lines[i+2])){
+   continue;
+  }
+
+  const rank=Number(lines[i]);
+  const num=Number(lines[i+2]);
+  const name=lines[i+3];
+
+  if(!name||/^(取消|除外|中止)$/.test(name)){
+   continue;
+  }
+
+  const sexAge=lines[i+4]||'';
+
+  if(!isSexAge(sexAge)){
+   continue;
+  }
+
+  const burden=lines[i+5]||'';
+  const jockey=lines[i+6]||'';
+
+  if(!isWeight(burden)||!jockey){
+   continue;
+  }
+
+  let pop=null;
+  let odds=null;
+  let time='';
+
+  for(let j=i+7;j<Math.min(lines.length,i+22);j++){
+   const s=lines[j];
+
+   if(!time&&isTime(s)){
+    time=s;
+   }
+
+   const pm=s.match(/^(\d+(?:\.\d+)?)\s*\((\d+)人気\)$/);
+
+   if(pm){
+    odds=+pm[1];
+    pop=+pm[2];
+   }
+
+   const p2=s.match(/^(\d+)人気$/);
+
+   if(p2){
+    pop=+p2[1];
+   }
+  }
+
+  rows.push({
+   rank,
+   num,
+   name,
+   jockey,
+   pop,
+   odds,
+   time,
+   cancelled:cancelNames.has(name)
   });
-});
 
-function saveDraft(){
-  const text=document.getElementById('raceInput').value;
+  i+=6;
+ }
 
-  try{
-    localStorage.setItem('shunten_web_draft',text);
-    document.getElementById('saveStatus').textContent=
-      '✓ このブラウザに入力内容を保存しました';
-  }catch(e){
-    document.getElementById('saveStatus').textContent=
-      '保存エラー: '+e.message;
-  }
+ return rows.filter(r=>!r.cancelled);
 }
 
-function boot(){
-  try{
-    const draft=localStorage.getItem('shunten_web_draft')||'';
-    document.getElementById('raceInput').value=draft;
+function parseNow(){
+ const raw=document.getElementById('raceInput').value;
+ const lines=linesOf(raw);
 
-    const old=localStorage.getItem(KEY);
+ if(!lines.length){
+  setStatus('入力が空です','warn');
+  return;
+ }
 
-    document.getElementById('saveStatus').textContent=
-      old
-      ? '✓ Web版に瞬天TGP保存データがあります'
-      : '✓ Web版は正常に動作しています';
-  }catch(e){
-    document.getElementById('saveStatus').textContent=
-      '保存領域エラー: '+e.message;
-  }
+ const meta=parseMeta(lines);
+ const rows=parseRows(lines);
+
+ parsed={
+  meta,
+  rows,
+  raw
+ };
+
+ renderPreview();
+
+ setStatus(
+  `読取: ${meta.venue||'競馬場?'} ${meta.raceNo||'?'}R / ${rows.length}頭`
+  +(rows.length?'':'\n結果行をまだ認識できていません'),
+  rows.length?'good':'warn'
+ );
 }
 
-boot();
+function setStatus(t,cls=''){
+ const el=document.getElementById('parseStatus');
+
+ el.className='status '+cls;
+ el.textContent=t;
+}
+
+function renderPreview(){
+ const el=document.getElementById('preview');
+
+ if(!parsed){
+  el.innerHTML='';
+  return;
+ }
+
+ const m=parsed.meta;
+
+ el.innerHTML=
+ `<div class="status">
+ <b>${m.date||'日付不明'} ${m.venue||'競馬場不明'} ${m.raceNo||'?'}R</b><br>
+ ${m.surface||''}${m.distance||''}m ${m.going||''} ${m.className||''}
+ </div>`
+ +
+ (
+ parsed.rows.length
+ ?
+ `<div class="tablewrap">
+ <table>
+ <tr>
+ <th>着</th>
+ <th>馬番</th>
+ <th>馬名</th>
+ <th>騎手</th>
+ <th>人気</th>
+ </tr>
+ ${parsed.rows.map(r=>
+ `<tr>
+ <td>${r.rank}</td>
+ <td>${r.num}</td>
+ <td>${r.name}</td>
+ <td>${r.jockey}</td>
+ <td>${r.pop??''}</td>
+ </tr>`
+ ).join('')}
+ </table>
+ </div>`
+ :''
+ );
+}
+
+function raceKey(m){
+ return [m.date,m.venue,m.raceNo].join('|');
+}
+
+function saveParsed(){
+
+ if(!parsed){
+  parseNow();
+ }
+
+ if(!parsed||!parsed.rows.length){
+  setStatus('保存できる結果行がありません','warn');
+  return;
+ }
+
+ const k=raceKey(parsed.meta);
+
+ state.races=state.races||[];
+
+ const idx=state.races.findIndex(
+  r=>raceKey(r.meta||r)===k
+ );
+
+ const obj={
+  meta:parsed.meta,
+  rows:parsed.rows,
+  savedAt:new Date().toISOString()
+ };
+
+ if(idx>=0){
+  state.races[idx]=obj;
+ }else{
+  state.races.push(obj);
+ }
+
+ rebuildDerived();
+ persist();
+ renderAll();
+
+ setStatus(
+  `✓ 保存しました: ${parsed.meta.venue} ${parsed.meta.raceNo}R (${parsed.rows.length}頭)`,
+  'good'
+ );
+}
+
+function rebuildDerived(){
+ const hist=[];
+
+ for(const race of state.races||[]){
+  for(const r of race.rows||[]){
+   hist.push({
+    ...r,
+    ...race.meta
+   });
+  }
+ }
+
+ state.history=hist;
+}
+
+function jockeyStats(){
+ const map=new Map();
+
+ for(const r of state.history||[]){
+
+  if(!r.jockey)continue;
+
+  const x=map.get(r.jockey)||{
+   jockey:r.jockey,
+   rides:0,
+   wins:0,
+   places:0,
+   sumRank:0
+  };
+
+  x.rides++;
+
+  if(r.rank===1)x.wins++;
+  if(r.rank<=3)x.places++;
+
+  x.sumRank+=Number(r.rank)||0;
+
+  map.set(r.jockey,x);
+ }
+
+ return [...map.values()]
+ .sort((a,b)=>b.rides-a.rides);
+}
+
+function horseStats(){
+ const map=new Map();
+
+ for(const r of state.history||[]){
+
+  if(!r.name)continue;
+
+  const x=map.get(r.name)||{
+   name:r.name,
+   runs:0,
+   wins:0,
+   places:0
+  };
+
+  x.runs++;
+
+  if(r.rank===1)x.wins++;
+  if(r.rank<=3)x.places++;
+
+  map.set(r.name,x);
+ }
+
+ return [...map.values()]
+ .sort((a,b)=>b.runs-a.runs);
+}
+
+function pct(a,b){
+ return b
+ ?`${(a/b*100).toFixed(1)}%`
+ :'0.0%';
+}
+
+function renderJockeys(){
+ const rows=jockeyStats();
+
+ document.getElementById('raceCount').textContent=
+  (state.races||[]).length;
+
+ document.getElementById('jockeyCount').textContent=
+  rows.length;
+
+ document.getElementById('rideCount').textContent=
+  (state.history||[]).length;
+
+ document.getElementById('jockeyTable').innerHTML=
+ '<tr><th>騎手</th><th>鞍数</th><th>1着</th><th>勝率</th><th>複勝圏</th><th>複勝率</th><th>平均着順</th></tr>'
+ +
+ rows.map(x=>
+ `<tr>
+ <td>${x.jockey}</td>
+ <td>${x.rides}</td>
+ <td>${x.wins}</td>
+ <td>${pct(x.wins,x.rides)}</td>
+ <td>${x.places}</td>
+ <td>${pct(x.places,x.rides)}</td>
+ <td>${(x.sumRank/x.rides).toFixed(2)}</td>
+ </tr>`
+ ).join('');
+
+ const sel=document.getElementById('jockeySelect');
+ const cur=sel.value;
+
+ sel.innerHTML=
+ '<option value="">騎手を選択</option>'
+ +
+ rows.map(x=>`<option>${x.jockey}</option>`).join('');
+
+ if(rows.some(x=>x.jockey===cur)){
+  sel.value=cur;
+ }
+}
+
+function renderJockeyDetail(){
+ const j=document.getElementById('jockeySelect').value;
+ const el=document.getElementById('jockeyDetail');
+
+ if(!j){
+  el.innerHTML='';
+  return;
+ }
+
+ const rs=(state.history||[]).filter(
+  r=>r.jockey===j
+ );
+
+ const group=(key)=>{
+  const m=new Map();
+
+  for(const r of rs){
+   const k=String(r[key]??'不明');
+
+   const x=m.get(k)||{
+    k,
+    n:0,
+    w:0,
+    p:0
+   };
+
+   x.n++;
+
+   if(r.rank===1)x.w++;
+   if(r.rank<=3)x.p++;
+
+   m.set(k,x);
+  }
+
+  return [...m.values()]
+   .sort((a,b)=>b.n-a.n);
+ };
+
+ const block=(title,key)=>
+ `<h3>${title}</h3>
+ <div class="tablewrap">
+ <table>
+ <tr>
+ <th>条件</th>
+ <th>鞍数</th>
+ <th>勝率</th>
+ <th>複勝率</th>
+ </tr>
+ ${
+  group(key).map(x=>
+  `<tr>
+  <td>${x.k}</td>
+  <td>${x.n}</td>
+  <td>${pct(x.w,x.n)}</td>
+  <td>${pct(x.p,x.n)}</td>
+  </tr>`
+  ).join('')
+ }
+ </table>
+ </div>`;
+
+ el.innerHTML=
+  block('競馬場','venue')
+  +block('馬場','going')
+  +block('距離','distance')
+  +block('人気','pop');
+}
+
+function renderHorses(){
+ const rows=horseStats();
+
+ document.getElementById('horseTable').innerHTML=
+ '<tr><th>馬名</th><th>走数</th><th>1着</th><th>勝率</th><th>複勝圏</th><th>複勝率</th></tr>'
+ +
+ rows.map(x=>
+ `<tr>
+ <td>${x.name}</td>
+ <td>${x.runs}</td>
+ <td>${x.wins}</td>
+ <td>${pct(x.wins,x.runs)}</td>
+ <td>${x.places}</td>
+ <td>${pct(x.places,x.runs)}</td>
+ </tr>`
+ ).join('');
+}
+
+function deleteLastRace(){
+
+ if(!(state.races||[]).length)return;
+
+ const last=state.races[state.races.length-1];
+
+ if(!confirm(
+  `${last.meta?.date||''} ${last.meta?.venue||''} ${last.meta?.raceNo||''}R を削除しますか？`
+ )){
+  return;
+ }
+
+ state.races.pop();
+
+ rebuildDerived();
+ persist();
+ renderAll();
+
+ setStatus(
+  '最後のレースを削除しました',
+  'good'
+ );
+}
+
+function exportData(){
+ const blob=new Blob(
+  [JSON.stringify(state,null,2)],
+  {type:'application/json'}
+ );
+
+ const a=document.createElement('a');
+
+ a.href=URL.createObjectURL(blob);
+ a.download='shunten_tgp_backup.json';
+
+ a.click();
+
+ URL.revokeObjectURL(a.href);
+}
+
+function importData(ev){
+ const f=ev.target.files[0];
+
+ if(!f)return;
+
+ const rd=new FileReader();
+
+ rd.onload=()=>{
+  try{
+   const x=JSON.parse(rd.result);
+
+   state=Object.assign(
+    emptyState(),
+    x
+   );
+
+   rebuildDerived();
+   persist();
+   renderAll();
+
+   setStatus(
+    '✓ JSONを読み込みました',
+    'good'
+   );
+
+  }catch(e){
+
+   setStatus(
+    'JSON読込エラー: '+e.message,
+    'warn'
+   );
+  }
+ };
+
+ rd.readAsText(f);
+}
+
+function renderAll(){
+ renderJockeys();
+ renderJockeyDetail();
+ renderHorses();
+}
+
+document.querySelectorAll('.tab').forEach(
+ btn=>btn.addEventListener('click',()=>{
+
+  document.querySelectorAll('.tab').forEach(
+   x=>x.classList.remove('active')
+  );
+
+  document.querySelectorAll('.panel').forEach(
+   x=>x.classList.remove('active')
+  );
+
+  btn.classList.add('active');
+
+  document
+  .getElementById(btn.dataset.tab)
+  .classList.add('active');
+
+  if(btn.dataset.tab==='jockeys'){
+   renderJockeys();
+  }
+
+  if(btn.dataset.tab==='detail'){
+   renderJockeyDetail();
+  }
+
+  if(btn.dataset.tab==='horses'){
+   renderHorses();
+  }
+ })
+);
+
+(function boot(){
+
+ const y=
+  localStorage.getItem(YEAR_KEY)
+  ||new Date().getFullYear();
+
+ document.getElementById(
+  'collectionYear'
+ ).value=y;
+
+ document.getElementById(
+  'collectionYear'
+ ).addEventListener(
+  'change',
+  e=>localStorage.setItem(
+   YEAR_KEY,
+   e.target.value
+  )
+ );
+
+ rebuildDerived();
+ renderAll();
+
+ setStatus(
+  `✓ Web版は正常に動作しています
+保存レース: ${(state.races||[]).length} / 学習騎乗: ${(state.history||[]).length}`,
+  'good'
+ );
+
+})();
 </script>
 
 </body>
