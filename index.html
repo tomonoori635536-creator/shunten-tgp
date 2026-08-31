@@ -1,13 +1,223 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>瞬天 TGP ENGINE</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>鞍上パターン帳 × 瞬天 TGP ENGINE</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:#f4f6f8;
+  color:#18212b;
+}
+header{
+  background:#101820;
+  color:white;
+  padding:20px;
+}
+header h1{margin:0;font-size:24px}
+header p{margin:6px 0 0;color:#b8c5d1}
+nav{
+  display:flex;
+  gap:8px;
+  padding:12px;
+  background:white;
+  border-bottom:1px solid #ddd;
+  overflow-x:auto;
+}
+nav button{
+  border:1px solid #ccd3da;
+  background:#fff;
+  padding:10px 14px;
+  border-radius:8px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+nav button.active{
+  background:#101820;
+  color:white;
+}
+main{
+  max-width:1200px;
+  margin:20px auto;
+  padding:0 15px;
+}
+.panel{
+  display:none;
+  background:white;
+  border:1px solid #dce1e5;
+  border-radius:12px;
+  padding:20px;
+  box-shadow:0 2px 8px rgba(0,0,0,.04);
+}
+.panel.active{display:block}
+textarea{
+  width:100%;
+  min-height:300px;
+  padding:12px;
+  border:1px solid #ccd3da;
+  border-radius:8px;
+  resize:vertical;
+}
+.action{
+  margin-top:12px;
+  padding:11px 18px;
+  border:0;
+  border-radius:8px;
+  background:#101820;
+  color:white;
+  cursor:pointer;
+}
+.status{
+  margin-top:15px;
+  padding:12px;
+  background:#eef3f7;
+  border-radius:8px;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:12px;
+}
+.card{
+  padding:16px;
+  border:1px solid #dce1e5;
+  border-radius:10px;
+}
+.big{font-size:28px;font-weight:700}
+.good{color:#16834a}
+</style>
 </head>
+
 <body>
-  <h1>🏇 瞬天 TGP ENGINE</h1>
-  <h2>Webアプリ接続成功！</h2>
-  <p>ここが表示されたら、Vercel公開は成功です。</p>
+
+<header>
+  <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
+  <p>騎手パターン・馬能力・TGP・時系列バックテスト</p>
+</header>
+
+<nav>
+  <button class="tab active" data-tab="input">データ入力</button>
+  <button class="tab" data-tab="jockeys">騎手一覧</button>
+  <button class="tab" data-tab="detail">騎手詳細</button>
+  <button class="tab" data-tab="horses">馬データ</button>
+  <button class="tab" data-tab="prediction">統合予想</button>
+  <button class="tab" data-tab="verify">検証・答え合わせ</button>
+</nav>
+
+<main>
+
+<section id="input" class="panel active">
+  <h2>データ入力</h2>
+  <p>netkeiba / NAR の出馬表・結果をそのまま貼り付けます。</p>
+
+  <textarea id="raceInput"
+    placeholder="ここにレースデータを貼り付け"></textarea>
+
+  <button class="action" onclick="saveDraft()">入力を保存</button>
+
+  <div class="status" id="saveStatus">
+    Web版の保存領域を確認中…
+  </div>
+</section>
+
+<section id="jockeys" class="panel">
+  <h2>騎手一覧</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="big" id="jockeyCount">0</div>
+      <div>登録騎手</div>
+    </div>
+    <div class="card">
+      <div class="big" id="rideCount">0</div>
+      <div>学習騎乗数</div>
+    </div>
+  </div>
+  <p>次の段階で条件別の勝率・複勝率を接続します。</p>
+</section>
+
+<section id="detail" class="panel">
+  <h2>騎手詳細</h2>
+  <p>開催場・人気・馬番・距離・馬場・クラス別パターンを表示します。</p>
+</section>
+
+<section id="horses" class="panel">
+  <h2>馬データ</h2>
+  <p>過去走・コース適性・距離適性・近走内容を学習します。</p>
+</section>
+
+<section id="prediction" class="panel">
+  <h2>統合予想</h2>
+  <div class="grid">
+    <div class="card">
+      <strong>馬能力</strong>
+      <div class="big">80%</div>
+    </div>
+    <div class="card">
+      <strong>騎手</strong>
+      <div class="big">20%</div>
+    </div>
+  </div>
+  <p>現在の時系列検証で有力だった80:20を仮表示しています。</p>
+</section>
+
+<section id="verify" class="panel">
+  <h2>🔒 時系列バックテスト</h2>
+  <p>対象レースより前の日付のデータだけを使って検証します。</p>
+  <div class="status good">
+    未来データを使わない検証方式
+  </div>
+</section>
+
+</main>
+
+<script>
+const KEY='jockeyPatternBook_v2';
+
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+function saveDraft(){
+  const text=document.getElementById('raceInput').value;
+
+  try{
+    localStorage.setItem('shunten_web_draft',text);
+    document.getElementById('saveStatus').textContent=
+      '✓ このブラウザに入力内容を保存しました';
+  }catch(e){
+    document.getElementById('saveStatus').textContent=
+      '保存エラー: '+e.message;
+  }
+}
+
+function boot(){
+  try{
+    const draft=localStorage.getItem('shunten_web_draft')||'';
+    document.getElementById('raceInput').value=draft;
+
+    const old=localStorage.getItem(KEY);
+
+    document.getElementById('saveStatus').textContent=
+      old
+      ? '✓ Web版に瞬天TGP保存データがあります'
+      : '✓ Web版は正常に動作しています';
+  }catch(e){
+    document.getElementById('saveStatus').textContent=
+      '保存領域エラー: '+e.message;
+  }
+}
+
+boot();
+</script>
+
 </body>
 </html>
