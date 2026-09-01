@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.22：騎手人気1〜12位を個別学習</p>
+<p>クリーン版 v4.23：騎手の当日成績×Rパターン学習</p>
 </header>
 <main>
 <div class="tabs">
@@ -571,25 +571,102 @@ function jockeyLineupPattern(row,meta,cardRows){
   else if(pairMatches<10&&selfBand.length<10)label='参考';
   return {adj,pairAdj,posAdj,pairMatches,pairOpponents,posN:selfBand.length,label,notes};
 }
+function dayJockeyContext(jockey,date,raceNo,venue=''){
+  const rn=Number(raceNo);
+  const ctx={rides:0,wins:0,places:0};
+  if(!jockey||!date||!Number.isFinite(rn))return ctx;
+  for(const race of (state.races||[])){
+    if(String(race.meta?.date||'')!==String(date))continue;
+    if(venue&&race.meta?.venue&&String(race.meta.venue)!==String(venue))continue;
+    const rno=Number(race.meta?.raceNo);
+    if(!Number.isFinite(rno)||rno>=rn)continue;
+    const rr=(race.rows||[]).find(x=>x.jockey===jockey&&Number.isFinite(Number(x.rank)));
+    if(!rr)continue;
+    const rank=Number(rr.rank);
+    ctx.rides++;
+    if(rank===1)ctx.wins++;
+    if(rank<=3)ctx.places++;
+  }
+  return ctx;
+}
+function dailyPatternRate(rows){
+  const n=rows.length;if(!n)return {n:0,wins:0,places:0,winRate:0,placeRate:0};
+  const wins=rows.filter(x=>Number(x.rank)===1).length;
+  const places=rows.filter(x=>Number(x.rank)<=3).length;
+  return {n,wins,places,winRate:wins/n,placeRate:places/n};
+}
+function jockeyDayRacePattern(row,meta){
+  const jockey=String(row?.jockey||'');
+  const targetDate=dateNumber(meta?.date);
+  const targetRace=Number(meta?.raceNo);
+  const venue=String(meta?.venue||'');
+  const current=dayJockeyContext(jockey,meta?.date,targetRace,venue);
+  if(!jockey||!targetDate||!Number.isFinite(targetRace))return {adj:0,label:'未学習',current,n:0,wins:0,places:0,sameRN:0,note:'日付またはR不明'};
+  const sameR=[];
+  const exact=[];
+  for(const race of (state.races||[])){
+    const d=dateNumber(race.meta?.date);
+    if(!d||d>=targetDate||Number(race.meta?.raceNo)!==targetRace)continue;
+    const rr=(race.rows||[]).find(x=>x.jockey===jockey&&Number.isFinite(Number(x.rank)));
+    if(!rr)continue;
+    const field=(race.rows||[]).filter(x=>Number.isFinite(Number(x.rank))).length;
+    const enriched={...rr,fieldSize:field};
+    sameR.push(enriched);
+    const hist=dayJockeyContext(jockey,race.meta?.date,targetRace,race.meta?.venue||'');
+    if(hist.wins===current.wins&&hist.places===current.places)exact.push(enriched);
+  }
+  const exactStat=dailyPatternRate(exact);
+  const baseStat=dailyPatternRate(sameR);
+  let adj=0;
+  if(exactStat.n&&baseStat.n){
+    const edge=(exactStat.winRate-baseStat.winRate)*14+(exactStat.placeRate-baseStat.placeRate)*18;
+    const shrink=exactStat.n/(exactStat.n+5);
+    adj=clampValue(edge*shrink,-6,6);
+  }
+  let label='蓄積あり';
+  if(exactStat.n===0)label='未学習';
+  else if(exactStat.n<3)label='サンプル少';
+  else if(exactStat.n<6)label='参考';
+  const note=`${targetRace}R前 ${current.wins}勝・3着内${current.places}回（当日${current.rides}鞍） → 過去${exactStat.n}回 / 1着${exactStat.wins}回 / 3着内${exactStat.places}回`;
+  return {adj,label,current,n:exactStat.n,wins:exactStat.wins,places:exactStat.places,sameRN:baseStat.n,note};
+}
+function dailyPatternEntries(name){
+  const map=new Map();
+  const races=[...(state.races||[])].sort((a,b)=>dateNumber(a.meta?.date)-dateNumber(b.meta?.date)||Number(a.meta?.raceNo||0)-Number(b.meta?.raceNo||0));
+  for(const race of races){
+    const rn=Number(race.meta?.raceNo);
+    if(!Number.isFinite(rn))continue;
+    const rr=(race.rows||[]).find(x=>x.jockey===name&&Number.isFinite(Number(x.rank)));
+    if(!rr)continue;
+    const ctx=dayJockeyContext(name,race.meta?.date,rn,race.meta?.venue||'');
+    const key=`${rn}R / 前${ctx.wins}勝・3着内${ctx.places}回`;
+    if(!map.has(key))map.set(key,{rides:0,wins:0,places:0,rankSum:0,raceNo:rn,preWins:ctx.wins,prePlaces:ctx.places});
+    const x=map.get(key),rank=Number(rr.rank);
+    x.rides++;x.rankSum+=rank;if(rank===1)x.wins++;if(rank<=3)x.places++;
+  }
+  return [...map.entries()].sort((a,b)=>a[1].raceNo-b[1].raceNo||a[1].preWins-b[1].preWins||a[1].prePlaces-b[1].prePlaces);
+}
 function scoreClass(score){if(score==null)return '';return score>=60?'scoreGood':score>=45?'scoreMid':'scoreLow'}
 function renderPreview(p){
   const m=p.meta||{},modeLabel=p.mode==='result'?'結果ページ':p.mode==='card'?'出馬表':'未判定';
   let html=`<div class="meta"><div class="chip"><b>モード</b><br>${esc(modeLabel)}</div><div class="chip"><b>日付</b><br>${esc(m.date||'不明')}</div><div class="chip"><b>競馬場</b><br>${esc(m.venue||'不明')}</div><div class="chip"><b>R</b><br>${m.raceNo??'不明'}</div><div class="chip"><b>条件</b><br>${esc(`${m.surface||'?'}${m.distance||'?'}m ${m.going||''}`)}</div></div>`;
   if(!p.rows?.length){html+=`<p class="warn">馬データを認識できませんでした。</p>`;$('preview').innerHTML=html;return}
   if(p.mode==='card'){
-    html+=`<p class="muted">騎手適性は過去履歴から計算。並び補正は、完全保存された結果に加え、過去馬柱から安全に同一レースと復元できた組だけを使い「内・中・外」と同乗騎手に対する内側/外側の先着傾向を学習します。曖昧な組は除外し、補正は最大±8点です。</p>`;
-    html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>馬履歴</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>並び補正</th><th>最終騎手</th><th>信頼度</th><th>並び学習</th><th>今回の一致データ</th></tr></thead><tbody>`;
+    html+=`<p class="muted">騎手適性は過去履歴から計算。並び補正は最大±8点。当日R補正は、対象Rより前の当日成績（勝数・3着内数）と同じ状態で、そのRに騎乗した過去開催日の成績を騎手ごとに学習します。未来のRや同日の後続結果は使わず、補正は最大±6点です。</p>`;
+    html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>馬履歴</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>並び補正</th><th>当日R補正</th><th>最終騎手</th><th>信頼度</th><th>当日パターン</th><th>並び学習</th><th>今回の一致データ</th></tr></thead><tbody>`;
     html+=p.rows.map(r=>{
       const q=jockeySuitability(r,m);
       const lp=jockeyLineupPattern(r,m,p.rows);
+      const dp=jockeyDayRacePattern(r,m);
       const base=q.score==null?null:q.score;
-      const finalScore=base==null?null:clampValue(base+lp.adj,0,100);
+      const finalScore=base==null?null:clampValue(base+lp.adj+dp.adj,0,100);
       const scoreText=base==null?'--':Math.round(base);
       const finalText=finalScore==null?'--':Math.round(finalScore);
       const adjText=lp.label==='未学習'?'--':`${lp.adj>0?'+':''}${lp.adj.toFixed(1)}`;
+      const dayAdjText=dp.label==='未学習'?'--':`${dp.adj>0?'+':''}${dp.adj.toFixed(1)}`;
       const reason=q.reasons.length?q.reasons.join(' / '):`過去 ${q.total}鞍・条件一致なし`;
       const lineupText=lp.notes.length?lp.notes.slice(0,3).join(' / '):`位置 ${lp.posN}鞍 / 相手比較 ${lp.pairMatches}回`;
-      const horseRuns=horseHistoryBefore(r.name,m.date).length; return `<tr><td>${r.num??''}</td><td>${esc(r.name)}</td><td>${horseRuns}走</td><td>${esc(r.jockey)}</td><td>${r.pop??'-'}</td><td>${r.odds??'-'}</td><td class="scoreCell ${scoreClass(base)}">${scoreText}</td><td class="scoreCell ${scoreClass(50+lp.adj)}">${adjText}</td><td class="scoreCell ${scoreClass(finalScore)}">${finalText}</td><td><span class="scoreFlag">${esc(q.label)}</span><div class="muted">過去${q.total}鞍 / 一致${q.matchCount}鞍</div></td><td class="scoreNote"><span class="scoreFlag">${esc(lp.label)}</span><div class="muted">${esc(lineupText)}</div></td><td class="scoreNote">${esc(reason)}</td></tr>`;
+      const horseRuns=horseHistoryBefore(r.name,m.date).length; return `<tr><td>${r.num??''}</td><td>${esc(r.name)}</td><td>${horseRuns}走</td><td>${esc(r.jockey)}</td><td>${r.pop??'-'}</td><td>${r.odds??'-'}</td><td class="scoreCell ${scoreClass(base)}">${scoreText}</td><td class="scoreCell ${scoreClass(50+lp.adj)}">${adjText}</td><td class="scoreCell ${scoreClass(50+dp.adj)}">${dayAdjText}</td><td class="scoreCell ${scoreClass(finalScore)}">${finalText}</td><td><span class="scoreFlag">${esc(q.label)}</span><div class="muted">過去${q.total}鞍 / 一致${q.matchCount}鞍</div></td><td class="scoreNote"><span class="scoreFlag">${esc(dp.label)}</span><div class="muted">${esc(dp.note)}</div></td><td class="scoreNote"><span class="scoreFlag">${esc(lp.label)}</span><div class="muted">${esc(lineupText)}</div></td><td class="scoreNote">${esc(reason)}</td></tr>`;
     }).join('');
     html+=`</tbody></table></div>`;
   }else{
@@ -609,7 +686,7 @@ function avgRankText(x){return x.rides?(x.rankSum/x.rides).toFixed(2):'-'}
 function patternTable(title,entries,label){const rows=entries.sort((a,b)=>b[1].rides-a[1].rides).map(([k,x])=>`<tr><td>${esc(k)}</td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${avgRankText(x)}</td></tr>`).join('');return `<div class="patternCard"><h4>${title}</h4><div class="tablewrap"><table><tr><th>${label}</th><th>騎乗</th><th>1着</th><th>勝率</th><th>3着内</th><th>複勝率</th><th>平均着順</th></tr>${rows||'<tr><td colspan="7">データなし</td></tr>'}</table></div></div>`}
 function popularityExpectationCard(st){if(!st.popRides)return `<div class="patternCard"><h4>人気なり診断</h4><p class="muted">人気データのある結果がまだありません。</p></div>`;const atLeast=st.popBetter+st.popEqual;const diff=st.popDiffSum/st.popRides;const diffText=`${diff>0?'+':''}${diff.toFixed(2)}`;return `<div class="patternCard"><h4>人気なり診断</h4><p><b>対象 ${st.popRides}鞍</b></p><div class="tablewrap"><table><tr><th>判定</th><th>回数</th><th>率</th></tr><tr><td>人気より上の着順</td><td>${st.popBetter}</td><td>${pct(st.popBetter,st.popRides)}</td></tr><tr><td>人気どおり</td><td>${st.popEqual}</td><td>${pct(st.popEqual,st.popRides)}</td></tr><tr><td>人気より下の着順</td><td>${st.popWorse}</td><td>${pct(st.popWorse,st.popRides)}</td></tr><tr><td><b>人気以上</b></td><td><b>${atLeast}</b></td><td><b>${pct(atLeast,st.popRides)}</b></td></tr></table></div><p class="muted">平均人気差 ${diffText}。プラスほど、人気順位より上の着順へ持ってきています。</p></div>`}
 function bestPattern(st){const all=[];for(const [type,obj] of [['競馬場',st.venues],['コース',st.courses],['馬場',st.goings],['人気帯',st.pops]])for(const [key,x] of Object.entries(obj))if(x.rides>=3)all.push({type,key,...x,score:(x.wins*2+x.places)/x.rides});return all.sort((a,b)=>b.score-a.score||b.rides-a.rides)[0]||null}
-function renderJockeyDetail(name){const st=jockeyStats().find(x=>x.name===name);if(!st){$('jockeyDetail').textContent='騎手を選択してください。';return}const best=bestPattern(st);const popOrder=['1人気','2-3人気','4-6人気','7人気以下'];const popEntries=popOrder.filter(k=>st.pops[k]).map(k=>[k,st.pops[k]]);const zeroPop=()=>({rides:0,wins:0,places:0,rankSum:0});const exactPopEntries=Array.from({length:12},(_,i)=>{const k=`${i+1}人気`;return [k,st.popExact[k]||zeroPop()]});$('jockeyDetail').innerHTML=`<h3>${esc(st.name)} ${best?`<span class="badge">得意候補 ${esc(best.type)}: ${esc(best.key)}</span>`:''}</h3><p><b>${st.rides}鞍</b> / 1着 ${st.wins}（${pct(st.wins,st.rides)}） / 3着内 ${st.places}（${pct(st.places,st.rides)}） / 平均着順 ${avgRankText(st)}</p><div class="patternGrid">${patternTable('競馬場別',Object.entries(st.venues),'競馬場')}${patternTable('コース・距離別',Object.entries(st.courses),'コース')}${patternTable('馬場別',Object.entries(st.goings),'馬場')}${patternTable('人気帯別',popEntries,'人気帯')}${patternTable('人気順位別',exactPopEntries,'人気')}${popularityExpectationCard(st)}</div>`}
+function renderJockeyDetail(name){const st=jockeyStats().find(x=>x.name===name);if(!st){$('jockeyDetail').textContent='騎手を選択してください。';return}const best=bestPattern(st);const popOrder=['1人気','2-3人気','4-6人気','7人気以下'];const popEntries=popOrder.filter(k=>st.pops[k]).map(k=>[k,st.pops[k]]);const zeroPop=()=>({rides:0,wins:0,places:0,rankSum:0});const exactPopEntries=Array.from({length:12},(_,i)=>{const k=`${i+1}人気`;return [k,st.popExact[k]||zeroPop()]});$('jockeyDetail').innerHTML=`<h3>${esc(st.name)} ${best?`<span class="badge">得意候補 ${esc(best.type)}: ${esc(best.key)}</span>`:''}</h3><p><b>${st.rides}鞍</b> / 1着 ${st.wins}（${pct(st.wins,st.rides)}） / 3着内 ${st.places}（${pct(st.places,st.rides)}） / 平均着順 ${avgRankText(st)}</p><div class="patternGrid">${patternTable('競馬場別',Object.entries(st.venues),'競馬場')}${patternTable('コース・距離別',Object.entries(st.courses),'コース')}${patternTable('馬場別',Object.entries(st.goings),'馬場')}${patternTable('人気帯別',popEntries,'人気帯')}${patternTable('人気順位別',exactPopEntries,'人気')}${patternTable('当日成績 × R',dailyPatternEntries(name),'状態')}${popularityExpectationCard(st)}</div>`}
 function renderDashboard(){state=loadState();if(!Array.isArray(state.races))state.races=[];if(!Array.isArray(state.history))rebuildHistory();if(!Array.isArray(state.raceCards))state.raceCards=[];rebuildHorseHistory();const stats=jockeyStats();$('raceCount').textContent=state.races.length;$('rideCount').textContent=(state.history||[]).length;$('jockeyCount').textContent=stats.length;$('jockeyBody').innerHTML=stats.length?stats.map(x=>`<tr class="clickrow" data-jockey="${esc(x.name)}"><td><b>${esc(x.name)}</b></td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${avgRankText(x)}</td></tr>`).join(''):'<tr><td colspan="7">まだ登録された騎手がありません。</td></tr>';document.querySelectorAll('[data-jockey]').forEach(tr=>tr.addEventListener('click',()=>renderJockeyDetail(tr.dataset.jockey)));$('cardBody').innerHTML=state.raceCards.length?[...state.raceCards].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>✅</td><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="6">保存済み出馬表はありません。</td></tr>';$('raceBody').innerHTML=state.races.length?[...state.races].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="5">保存レースはありません。</td></tr>';const horseCount=new Set((state.horseHistory||[]).map(r=>r.name).filter(Boolean)).size;$('manageStatus').textContent=`保存レース: ${state.races.length} / 学習騎乗: ${(state.history||[]).length}（復元 ${(state.seedHistory||[]).length}） / 馬成績: ${(state.horseHistory||[]).length}走・${horseCount}頭 / 出馬表: ${state.raceCards.length}`}
 function downloadJSON(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`shunten_backup_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href)}
 $('autoBackupBtn').addEventListener('click',chooseAutoJsonBackup);
@@ -618,7 +695,7 @@ $('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];
 $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('manageStatus').textContent='削除するレースがありません。';return}const r=state.races.pop();rebuildHistory();renderDashboard();triggerAutoJsonBackup();$('manageStatus').textContent=`最後のレースを削除しました: ${r.meta?.date||''} ${r.meta?.venue||''} ${r.meta?.raceNo??''}R`});
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.20 起動。保存確認とJSON自動バックアップに対応しました。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.23 起動。当日ここまでの勝数・3着内数 × Rを騎手別に学習します。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
