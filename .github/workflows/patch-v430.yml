@@ -1,0 +1,39 @@
+name: patch-v430
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v430.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch index
+        run: python .github/scripts/patch_v430.py
+      - name: Syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          assert 'クリーン版 v4.30：単勝回収率の安定性を分解検証' in s
+          assert '最大配当1頭除外ROI' in s
+          assert '1.0〜2.9倍' in s
+          assert 'oddsBands' in s
+          assert 'winOdds' in s
+          m=re.search(r'<script>(.*)</script>',s,re.S)
+          assert m
+          Path('/tmp/index.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/index.js
+      - name: Commit
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'feat: add ROI stability diagnostics'
+          git push
