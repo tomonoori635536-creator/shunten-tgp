@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.11：空白区切り出馬表に対応</p>
+<p>クリーン版 v4.12：出馬表本体だけを限定読取</p>
 </header>
 <main>
 <div class="tabs">
@@ -171,11 +171,23 @@ function nextCardRowIndex(lines,from){
   }
   return lines.length;
 }
+function findCardTableStart(lines){
+  for(let i=0;i<lines.length;i++){
+    const near=lines.slice(i,i+14).join(' ');
+    if(/馬名/.test(near)&&/性齢/.test(near)&&/斤量/.test(near)&&/騎手/.test(near)&&/馬体重/.test(near)&&/人気/.test(near))return i;
+  }
+  return -1;
+}
 function parseRaceCard(lines){
   const out=[];
-  const start=Math.max(0,lines.findIndex(x=>/発走/.test(x)));
+  const header=findCardTableStart(lines);
+  if(header<0)return out;
+  let end=lines.length;
+  for(let i=header+1;i<lines.length;i++){
+    if(/選んだ馬のオッズを見る|Myレース|※結果・成績・オッズ/.test(lines[i])){end=i;break}
+  }
   const tokens=[];
-  for(let i=start;i<lines.length;i++){
+  for(let i=header;i<end;i++){
     const s=String(lines[i]||'').trim();
     if(!s)continue;
     for(const part of s.split(/\s+/)){
@@ -183,7 +195,7 @@ function parseRaceCard(lines){
       if(t)tokens.push(t);
     }
   }
-  const noise=v=>isCardNoise(v)||/^(?:Image|お気に入り馬|マスター|レース別馬メモ|閉じる|削除|保存)$/.test(v);
+  const noise=v=>isCardNoise(v)||/^(?:Image|お気に入り馬|マスター|レース別馬メモ|閉じる|削除|保存|---)$/.test(v);
   for(let sexIdx=0;sexIdx<tokens.length;sexIdx++){
     if(!isSexAge(tokens[sexIdx]))continue;
     let burdenIdx=-1;
@@ -198,7 +210,7 @@ function parseRaceCard(lines){
     }
     if(!jockey)continue;
     let name='',nameIdx=-1;
-    for(let j=sexIdx-1;j>=Math.max(0,sexIdx-7);j--){
+    for(let j=sexIdx-1;j>=Math.max(0,sexIdx-8);j--){
       const v=tokens[j];
       if(noise(v)||/^\d+(?:\.\d+)?$/.test(v)||/^\d+\(.+\)$/.test(v)||/^(?:愛知|取消|除外|中止)$/.test(v))continue;
       if(/^(?:枠|馬|番|印|馬名|性齢|斤量|騎手|厩舎|馬体重|オッズ|人気)$/.test(v))continue;
@@ -206,7 +218,7 @@ function parseRaceCard(lines){
     }
     if(!name||nameIdx<0)continue;
     const nums=[];
-    for(let j=nameIdx-1;j>=Math.max(0,nameIdx-6);j--){
+    for(let j=nameIdx-1;j>=Math.max(0,nameIdx-7);j--){
       const v=tokens[j];
       if(noise(v))continue;
       if(/^\d{1,2}$/.test(v)){
@@ -217,10 +229,9 @@ function parseRaceCard(lines){
     }
     if(!nums.length)continue;
     const num=nums[0],frame=nums.length>1?nums[1]:null;
-    let pop=null,odds=null;
-    let nextSex=tokens.length;
+    let pop=null,odds=null,nextSex=tokens.length;
     for(let j=sexIdx+1;j<tokens.length;j++)if(isSexAge(tokens[j])){nextSex=j;break}
-    for(let j=jockeyIdx+1;j<Math.min(nextSex,jockeyIdx+14);j++){
+    for(let j=jockeyIdx+1;j<Math.min(nextSex,jockeyIdx+16);j++){
       const cur=tokens[j],next=tokens[j+1]||'';
       let m=cur.match(/^(\d+(?:\.\d+)?)\((\d+)人気\)$/);
       if(m){odds=Number(m[1]);pop=Number(m[2]);break}
@@ -236,7 +247,7 @@ function parseRaceCard(lines){
   return dedupe(out,r=>`${r.num}|${r.name}`);
 }
 function dedupe(arr,keyFn){const seen=new Set();return arr.filter(x=>{const k=keyFn(x);if(seen.has(k)) return false;seen.add(k);return true})}
-function parseAll(raw){const lines=linesOf(raw);if(!lines.length)return {error:'入力が空です'};const meta=parseMeta(lines),resultRows=parseResultRows(lines),cardRows=resultRows.length>=3?[]:parseRaceCard(lines),mode=resultRows.length>=3?'result':cardRows.length?'card':'unknown';return {meta,mode,rows:mode==='result'?resultRows:cardRows,lines}}
+function parseAll(raw){const lines=linesOf(raw);if(!lines.length)return {error:'入力が空です'};const meta=parseMeta(lines),hasCard=findCardTableStart(lines)>=0,cardRows=hasCard?parseRaceCard(lines):[],resultRows=hasCard?[]:parseResultRows(lines),mode=cardRows.length?'card':resultRows.length>=3?'result':'unknown';return {meta,mode,rows:mode==='result'?resultRows:cardRows,lines}}
 function dateNumber(s){const m=String(s||'').match(/(20\d{2})[\/.\-年](\d{1,2})[\/.\-月](\d{1,2})/);if(!m)return null;return Number(`${m[1]}${String(m[2]).padStart(2,'0')}${String(m[3]).padStart(2,'0')}`)}
 function popularityBand(pop){const n=Number(pop);if(!Number.isFinite(n)||n<1)return '';return n===1?'1人気':n<=3?'2-3人気':n<=6?'4-6人気':'7人気以下'}
 function jockeyHistoryBefore(jockey,targetDate){const target=dateNumber(targetDate);return (state.history||[]).filter(r=>{if(r.jockey!==jockey||!Number.isFinite(Number(r.rank)))return false;if(!target)return true;const d=dateNumber(r.date);return !d||d<target})}
@@ -264,7 +275,7 @@ $('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];
 $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('manageStatus').textContent='削除するレースがありません。';return}const r=state.races.pop();rebuildHistory();renderDashboard();$('manageStatus').textContent=`最後のレースを削除しました: ${r.meta?.date||''} ${r.meta?.venue||''} ${r.meta?.raceNo??''}R`});
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.11 起動。空白区切りの出馬表にも対応しました。','ok');renderDashboard()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.12 起動。過去走を除外し、出馬表本体だけを読み取ります。','ok');renderDashboard()})();
 </script>
 </body>
 </html>
