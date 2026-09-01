@@ -1,0 +1,40 @@
+name: patch-v432
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v432.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch index
+        run: python .github/scripts/patch_v432.py
+      - name: Syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          assert 'クリーン版 v4.32：並び補正の中身とデータ由来を分解' in s
+          assert '位置補正' in s
+          assert '相手比較補正' in s
+          assert 'pairLiveMatches' in s
+          assert 'pairRecoveredMatches' in s
+          assert '実=保存済みの実結果レース' in s
+          m=re.search(r'<script>(.*)</script>',s,re.S)
+          assert m
+          Path('/tmp/index.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/index.js
+      - name: Commit
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'feat: decompose lineup adjustment provenance'
+          git push
