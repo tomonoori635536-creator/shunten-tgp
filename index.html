@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.12：出馬表本体だけを限定読取</p>
+<p>クリーン版 v4.13：netkeiba出馬表本体を直接読取</p>
 </header>
 <main>
 <div class="tabs">
@@ -179,70 +179,33 @@ function findCardTableStart(lines){
   return -1;
 }
 function parseRaceCard(lines){
+  const text=lines.join(' ').replace(/\s+/g,' ').trim();
   const out=[];
-  const header=findCardTableStart(lines);
-  if(header<0)return out;
-  let end=lines.length;
-  for(let i=header+1;i<lines.length;i++){
-    if(/選んだ馬のオッズを見る|Myレース|※結果・成績・オッズ/.test(lines[i])){end=i;break}
+  const rowRe=/(?:^|\s)([1-8])\s+([1-9]|1\d|2\d)\s+(?:(?:--|\[Select\]|Select|印)\s+)*([^\s]+?)(?:\s+Image)?\s+((?:牡|牝|セ)\d+)\s+(\d{2,3}(?:\.\d)?)\s+([^\s]+)/g;
+  const anchors=[];
+  let m;
+  while((m=rowRe.exec(text))){
+    anchors.push({index:m.index,end:rowRe.lastIndex,frame:Number(m[1]),num:Number(m[2]),name:m[3],sexAge:m[4],burden:Number(m[5]),jockey:m[6]});
   }
-  const tokens=[];
-  for(let i=header;i<end;i++){
-    const s=String(lines[i]||'').trim();
-    if(!s)continue;
-    for(const part of s.split(/\s+/)){
-      const t=String(part||'').trim();
-      if(t)tokens.push(t);
+  for(let i=0;i<anchors.length;i++){
+    const a=anchors[i];
+    const block=text.slice(a.end,i+1<anchors.length?anchors[i+1].index:Math.min(text.length,a.end+260));
+    let pop=null,odds=null;
+    let om=block.match(/\b\d{3}(?:\([+-]?\d+\))?\s+(\d+(?:\.\d+)?)\s+(\d{1,2})(?:人気)?\b/);
+    if(om){
+      odds=Number(om[1]);
+      const candidate=Number(om[2]);
+      if(candidate>=1&&candidate<=20)pop=candidate;
     }
-  }
-  const noise=v=>isCardNoise(v)||/^(?:Image|お気に入り馬|マスター|レース別馬メモ|閉じる|削除|保存|---)$/.test(v);
-  for(let sexIdx=0;sexIdx<tokens.length;sexIdx++){
-    if(!isSexAge(tokens[sexIdx]))continue;
-    let burdenIdx=-1;
-    for(let j=sexIdx+1;j<Math.min(tokens.length,sexIdx+4);j++){
-      if(/^\d{2,3}(?:\.\d)?$/.test(tokens[j])){burdenIdx=j;break}
+    if(pop==null){
+      om=block.match(/(?:^|\s)(\d+(?:\.\d+)?)\s*\((\d{1,2})人気\)/);
+      if(om){odds=Number(om[1]);pop=Number(om[2]);}
     }
-    if(burdenIdx<0)continue;
-    let jockey='',jockeyIdx=-1;
-    for(let j=burdenIdx+1;j<Math.min(tokens.length,burdenIdx+4);j++){
-      const v=tokens[j];
-      if(!noise(v)&&looksJockey(v)&&!/^愛知$/.test(v)){jockey=v;jockeyIdx=j;break}
+    if(pop==null){
+      const pm=block.match(/(?:^|\s)(\d{1,2})人気(?:\s|$)/);
+      if(pm)pop=Number(pm[1]);
     }
-    if(!jockey)continue;
-    let name='',nameIdx=-1;
-    for(let j=sexIdx-1;j>=Math.max(0,sexIdx-8);j--){
-      const v=tokens[j];
-      if(noise(v)||/^\d+(?:\.\d+)?$/.test(v)||/^\d+\(.+\)$/.test(v)||/^(?:愛知|取消|除外|中止)$/.test(v))continue;
-      if(/^(?:枠|馬|番|印|馬名|性齢|斤量|騎手|厩舎|馬体重|オッズ|人気)$/.test(v))continue;
-      name=v.replace(/Image$/,'').trim();nameIdx=j;break;
-    }
-    if(!name||nameIdx<0)continue;
-    const nums=[];
-    for(let j=nameIdx-1;j>=Math.max(0,nameIdx-7);j--){
-      const v=tokens[j];
-      if(noise(v))continue;
-      if(/^\d{1,2}$/.test(v)){
-        const n=Number(v);
-        if(n>=1&&n<=20)nums.push(n);
-        if(nums.length>=2)break;
-      }
-    }
-    if(!nums.length)continue;
-    const num=nums[0],frame=nums.length>1?nums[1]:null;
-    let pop=null,odds=null,nextSex=tokens.length;
-    for(let j=sexIdx+1;j<tokens.length;j++)if(isSexAge(tokens[j])){nextSex=j;break}
-    for(let j=jockeyIdx+1;j<Math.min(nextSex,jockeyIdx+16);j++){
-      const cur=tokens[j],next=tokens[j+1]||'';
-      let m=cur.match(/^(\d+(?:\.\d+)?)\((\d+)人気\)$/);
-      if(m){odds=Number(m[1]);pop=Number(m[2]);break}
-      m=cur.match(/^(\d+)人気$/);
-      if(m){pop=Number(m[1]);continue}
-      if(/^\d+(?:\.\d+)?$/.test(cur)&&/^\d{1,2}$/.test(next)){
-        const o=Number(cur),candidate=Number(next);
-        if(o>=1&&candidate>=1&&candidate<=20){odds=o;pop=candidate;break}
-      }
-    }
-    out.push({frame,num,name,jockey,pop,odds,rank:null,sexAge:tokens[sexIdx]});
+    out.push({frame:a.frame,num:a.num,name:a.name,jockey:a.jockey,pop,odds,rank:null,sexAge:a.sexAge});
   }
   return dedupe(out,r=>`${r.num}|${r.name}`);
 }
