@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.24：51レース時系列バックテスト</p>
+<p>クリーン版 v4.25：当日Rは学習継続・最終点から一時除外</p>
 </header>
 <main>
 <div class="tabs">
@@ -751,18 +751,18 @@ function renderPreview(p){
   let html=`<div class="meta"><div class="chip"><b>モード</b><br>${esc(modeLabel)}</div><div class="chip"><b>日付</b><br>${esc(m.date||'不明')}</div><div class="chip"><b>競馬場</b><br>${esc(m.venue||'不明')}</div><div class="chip"><b>R</b><br>${m.raceNo??'不明'}</div><div class="chip"><b>条件</b><br>${esc(`${m.surface||'?'}${m.distance||'?'}m ${m.going||''}`)}</div></div>`;
   if(!p.rows?.length){html+=`<p class="warn">馬データを認識できませんでした。</p>`;$('preview').innerHTML=html;return}
   if(p.mode==='card'){
-    html+=`<p class="muted">騎手適性は過去履歴から計算。並び補正は最大±8点。当日R補正は、対象Rより前の当日成績（勝数・3着内数）と同じ状態で、そのRに騎乗した過去開催日の成績を騎手ごとに学習します。未来のRや同日の後続結果は使わず、補正は最大±6点です。</p>`;
-    html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>馬履歴</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>並び補正</th><th>当日R補正</th><th>最終騎手</th><th>信頼度</th><th>当日パターン</th><th>並び学習</th><th>今回の一致データ</th></tr></thead><tbody>`;
+    html+=`<p class="muted">騎手適性は過去履歴から計算。並び補正は最大±8点。当日Rパターンは、対象Rより前の当日成績（勝数・3着内数）と同じ状態で、そのRに騎乗した過去開催日の成績を騎手ごとに学習します。未来のRや同日の後続結果は使いません。現在はバックテスト結果により当日Rは参考表示のみとし、最終騎手点には加算しません。</p>`;
+    html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>馬履歴</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>並び補正</th><th>当日R参考</th><th>最終騎手</th><th>信頼度</th><th>当日パターン</th><th>並び学習</th><th>今回の一致データ</th></tr></thead><tbody>`;
     html+=p.rows.map(r=>{
       const q=jockeySuitability(r,m);
       const lp=jockeyLineupPattern(r,m,p.rows);
       const dp=jockeyDayRacePattern(r,m);
       const base=q.score==null?null:q.score;
-      const finalScore=base==null?null:clampValue(base+lp.adj+dp.adj,0,100);
+      const finalScore=base==null?null:clampValue(base+lp.adj,0,100);
       const scoreText=base==null?'--':Math.round(base);
       const finalText=finalScore==null?'--':Math.round(finalScore);
       const adjText=lp.label==='未学習'?'--':`${lp.adj>0?'+':''}${lp.adj.toFixed(1)}`;
-      const dayAdjText=dp.label==='未学習'?'--':`${dp.adj>0?'+':''}${dp.adj.toFixed(1)}`;
+      const dayAdjText=dp.label==='未学習'?'--':`${dp.adj>0?'+':''}${dp.adj.toFixed(1)} 参考`;
       const reason=q.reasons.length?q.reasons.join(' / '):`過去 ${q.total}鞍・条件一致なし`;
       const lineupText=lp.notes.length?lp.notes.slice(0,3).join(' / '):`位置 ${lp.posN}鞍 / 相手比較 ${lp.pairMatches}回`;
       const horseRuns=horseHistoryBefore(r.name,m.date).length; return `<tr><td>${r.num??''}</td><td>${esc(r.name)}</td><td>${horseRuns}走</td><td>${esc(r.jockey)}</td><td>${r.pop??'-'}</td><td>${r.odds??'-'}</td><td class="scoreCell ${scoreClass(base)}">${scoreText}</td><td class="scoreCell ${scoreClass(50+lp.adj)}">${adjText}</td><td class="scoreCell ${scoreClass(50+dp.adj)}">${dayAdjText}</td><td class="scoreCell ${scoreClass(finalScore)}">${finalText}</td><td><span class="scoreFlag">${esc(q.label)}</span><div class="muted">過去${q.total}鞍 / 一致${q.matchCount}鞍</div></td><td class="scoreNote"><span class="scoreFlag">${esc(dp.label)}</span><div class="muted">${esc(dp.note)}</div></td><td class="scoreNote"><span class="scoreFlag">${esc(lp.label)}</span><div class="muted">${esc(lineupText)}</div></td><td class="scoreNote">${esc(reason)}</td></tr>`;
@@ -795,7 +795,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.23 起動。当日ここまでの勝数・3着内数 × Rを騎手別に学習します。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.25 起動。当日Rは学習・表示を継続し、最終騎手点は騎手適性＋並び補正で計算します。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
