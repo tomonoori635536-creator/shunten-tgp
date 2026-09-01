@@ -78,7 +78,11 @@ function headerWindow(lines){
 }
 
 function parseDate(lines){
-  const full=lines.join(' ').match(
+  const year=Number($('year').value)||new Date().getFullYear();
+  const head=headerWindow(lines);
+
+  // 重要: 過去走の日付を拾わない。現在レースのヘッダー部分だけを見る。
+  const full=head.join(' ').match(
     /(20\d{2})[.\/年](\d{1,2})[.\/月](\d{1,2})/
   );
 
@@ -86,30 +90,27 @@ function parseDate(lines){
     return `${full[1]}/${String(full[2]).padStart(2,'0')}/${String(full[3]).padStart(2,'0')}`;
   }
 
-  const year=Number($('year').value)||new Date().getFullYear();
-  const head=headerWindow(lines);
+  // MM/DD の日付ナビがある場合は、本日へ に最も近い日付を優先。
+  const nav=[];
+  for(let i=0;i<head.length;i++){
+    const m=head[i].match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
+    if(m) nav.push({i,month:+m[1],day:+m[2]});
+  }
 
-  // 日付ナビに「本日へ」がある場合、その直前の日付を開催日として扱う。
-  // これで単純に中央を選んでしまう誤判定を避ける。
-  const todayIdx=head.findIndex(x=>x==='本日へ');
-  if(todayIdx>0){
-    for(let i=todayIdx-1;i>=0;i--){
-      const m=head[i].match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
-      if(m){
-        return `${year}/${String(+m[1]).padStart(2,'0')}/${String(+m[2]).padStart(2,'0')}`;
-      }
+  if(nav.length){
+    const todayIdx=head.findIndex(x=>x==='本日へ');
+    let pick=null;
+
+    if(todayIdx>=0){
+      const before=nav.filter(x=>x.i<todayIdx);
+      if(before.length) pick=before[before.length-1];
     }
-  }
 
-  // フォールバック: 発走より前にある最後の日付候補を使う。
-  let candidate=null;
-  for(const s of head){
-    const m=s.match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
-    if(m) candidate=[+m[1],+m[2]];
-  }
+    if(!pick){
+      pick=nav[Math.floor(nav.length/2)];
+    }
 
-  if(candidate){
-    return `${year}/${String(candidate[0]).padStart(2,'0')}/${String(candidate[1]).padStart(2,'0')}`;
+    return `${year}/${String(pick.month).padStart(2,'0')}/${String(pick.day).padStart(2,'0')}`;
   }
 
   return '';
