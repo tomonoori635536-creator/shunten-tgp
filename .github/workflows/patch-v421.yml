@@ -1,0 +1,37 @@
+name: patch-v421
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v421.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch index
+        run: python .github/scripts/patch_v421.py
+      - name: Syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          m=re.search(r'<script>(.*)</script>',s,re.S)
+          assert m
+          Path('/tmp/index.js').write_text(m.group(1),encoding='utf-8')
+          assert 'クリーン版 v4.21：取消・除外の結果誤読を修正' in s
+          assert "source!=='saved_result'" in s
+          assert '取消|除|除外|中|中止|失|失格' in s
+          PY
+          node --check /tmp/index.js
+      - name: Commit
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'fix: exclude cancelled runners from result learning'
+          git push
