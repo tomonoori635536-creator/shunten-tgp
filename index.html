@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.6：横表・タブ貼付の人気読取に対応</p>
+<p>クリーン版 v4.7：人気別騎手パターン・人気なり診断</p>
 </header>
 <main>
 <div class="tabs">
@@ -206,15 +206,36 @@ function pct(n,d){return d?`${(100*n/d).toFixed(1)}%`:'0.0%'}
 function bucketAdd(obj,key,rank){if(!obj[key])obj[key]={rides:0,wins:0,places:0,rankSum:0};const x=obj[key];x.rides++;x.rankSum+=rank;if(rank===1)x.wins++;if(rank<=3)x.places++}
 function jockeyStats(){
   const map=new Map();
-  const ensure=name=>{if(name&&!map.has(name))map.set(name,{name,rides:0,wins:0,places:0,rankSum:0,venues:{},pops:{},courses:{},goings:{}})};
+  const ensure=name=>{
+    if(name&&!map.has(name))map.set(name,{
+      name,rides:0,wins:0,places:0,rankSum:0,
+      venues:{},pops:{},popExact:{},courses:{},goings:{},
+      popRides:0,popBetter:0,popEqual:0,popWorse:0,popDiffSum:0
+    })
+  };
   for(const card of state.raceCards||[])for(const r of card.rows||[])ensure(r.jockey);
   for(const r of state.history||[]){
-    if(!r.jockey||!Number.isFinite(Number(r.rank))) continue;const k=r.jockey,rank=Number(r.rank);ensure(k);
-    const x=map.get(k);x.rides++;x.rankSum+=rank;if(rank===1)x.wins++;if(rank<=3)x.places++;
+    if(!r.jockey||!Number.isFinite(Number(r.rank))) continue;
+    const k=r.jockey,rank=Number(r.rank);ensure(k);
+    const x=map.get(k);
+    x.rides++;x.rankSum+=rank;if(rank===1)x.wins++;if(rank<=3)x.places++;
     bucketAdd(x.venues,r.venue||'不明',rank);
-    const course=(r.surface||r.distance)?`${r.surface||'?'}${r.distance||'?'}m`:'不明';bucketAdd(x.courses,course,rank);
+    const course=(r.surface||r.distance)?`${r.surface||'?'}${r.distance||'?'}m`:'不明';
+    bucketAdd(x.courses,course,rank);
     bucketAdd(x.goings,r.going||'不明',rank);
-    const pop=Number(r.pop);if(r.pop!==null&&r.pop!==''&&Number.isFinite(pop)&&pop>=1){const b=pop===1?'1人気':pop<=3?'2-3人気':pop<=6?'4-6人気':'7人気以下';bucketAdd(x.pops,b,rank)}
+
+    const pop=Number(r.pop);
+    if(r.pop!==null&&r.pop!==''&&Number.isFinite(pop)&&pop>=1){
+      const band=pop===1?'1人気':pop<=3?'2-3人気':pop<=6?'4-6人気':'7人気以下';
+      bucketAdd(x.pops,band,rank);
+      bucketAdd(x.popExact,`${pop}人気`,rank);
+
+      x.popRides++;
+      x.popDiffSum+=pop-rank;
+      if(rank<pop)x.popBetter++;
+      else if(rank===pop)x.popEqual++;
+      else x.popWorse++;
+    }
   }
   return [...map.values()].sort((a,b)=>b.rides-a.rides||b.wins-a.wins||a.name.localeCompare(b.name,'ja'));
 }
@@ -223,14 +244,47 @@ function patternTable(title,entries,label){
   const rows=entries.sort((a,b)=>b[1].rides-a[1].rides).map(([k,x])=>`<tr><td>${esc(k)}</td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${avgRankText(x)}</td></tr>`).join('');
   return `<div class="patternCard"><h4>${title}</h4><div class="tablewrap"><table><tr><th>${label}</th><th>騎乗</th><th>1着</th><th>勝率</th><th>3着内</th><th>複勝率</th><th>平均着順</th></tr>${rows||'<tr><td colspan="7">データなし</td></tr>'}</table></div></div>`;
 }
+function popularityExpectationCard(st){
+  if(!st.popRides)return `<div class="patternCard"><h4>人気なり診断</h4><p class="muted">人気データのある結果がまだありません。</p></div>`;
+  const atLeast=st.popBetter+st.popEqual;
+  const diff=st.popDiffSum/st.popRides;
+  const diffText=`${diff>0?'+':''}${diff.toFixed(2)}`;
+  return `<div class="patternCard"><h4>人気なり診断</h4>
+    <p><b>対象 ${st.popRides}鞍</b></p>
+    <div class="tablewrap"><table>
+      <tr><th>判定</th><th>回数</th><th>率</th></tr>
+      <tr><td>人気より上の着順</td><td>${st.popBetter}</td><td>${pct(st.popBetter,st.popRides)}</td></tr>
+      <tr><td>人気どおり</td><td>${st.popEqual}</td><td>${pct(st.popEqual,st.popRides)}</td></tr>
+      <tr><td>人気より下の着順</td><td>${st.popWorse}</td><td>${pct(st.popWorse,st.popRides)}</td></tr>
+      <tr><td><b>人気以上</b></td><td><b>${atLeast}</b></td><td><b>${pct(atLeast,st.popRides)}</b></td></tr>
+    </table></div>
+    <p class="muted">平均人気差 ${diffText}。プラスほど、人気順位より上の着順へ持ってきています。</p>
+  </div>`;
+}
 function bestPattern(st){
-  const all=[];for(const [type,obj] of [['競馬場',st.venues],['コース',st.courses],['馬場',st.goings],['人気',st.pops]])for(const [key,x] of Object.entries(obj))if(x.rides>=3)all.push({type,key,...x,score:(x.wins*2+x.places)/x.rides});
+  const all=[];
+  for(const [type,obj] of [['競馬場',st.venues],['コース',st.courses],['馬場',st.goings],['人気帯',st.pops]])
+    for(const [key,x] of Object.entries(obj))
+      if(x.rides>=3)all.push({type,key,...x,score:(x.wins*2+x.places)/x.rides});
   return all.sort((a,b)=>b.score-a.score||b.rides-a.rides)[0]||null;
 }
 function renderJockeyDetail(name){
-  const st=jockeyStats().find(x=>x.name===name);if(!st){$('jockeyDetail').textContent='騎手を選択してください。';return}
-  const best=bestPattern(st);const popOrder=['1人気','2-3人気','4-6人気','7人気以下'];const popEntries=popOrder.filter(k=>st.pops[k]).map(k=>[k,st.pops[k]]);
-  $('jockeyDetail').innerHTML=`<h3>${esc(st.name)} ${best?`<span class="badge">得意候補 ${esc(best.type)}: ${esc(best.key)}</span>`:''}</h3><p><b>${st.rides}鞍</b> / 1着 ${st.wins}（${pct(st.wins,st.rides)}） / 3着内 ${st.places}（${pct(st.places,st.rides)}） / 平均着順 ${avgRankText(st)}</p><div class="patternGrid">${patternTable('競馬場別',Object.entries(st.venues),'競馬場')}${patternTable('コース・距離別',Object.entries(st.courses),'コース')}${patternTable('馬場別',Object.entries(st.goings),'馬場')}${patternTable('人気別',popEntries,'人気')}</div>`;
+  const st=jockeyStats().find(x=>x.name===name);
+  if(!st){$('jockeyDetail').textContent='騎手を選択してください。';return}
+  const best=bestPattern(st);
+  const popOrder=['1人気','2-3人気','4-6人気','7人気以下'];
+  const popEntries=popOrder.filter(k=>st.pops[k]).map(k=>[k,st.pops[k]]);
+  const exactPopEntries=Object.entries(st.popExact).sort((a,b)=>Number(a[0].replace('人気',''))-Number(b[0].replace('人気','')));
+  $('jockeyDetail').innerHTML=`<h3>${esc(st.name)} ${best?`<span class="badge">得意候補 ${esc(best.type)}: ${esc(best.key)}</span>`:''}</h3>
+    <p><b>${st.rides}鞍</b> / 1着 ${st.wins}（${pct(st.wins,st.rides)}） / 3着内 ${st.places}（${pct(st.places,st.rides)}） / 平均着順 ${avgRankText(st)}</p>
+    <div class="patternGrid">
+      ${patternTable('競馬場別',Object.entries(st.venues),'競馬場')}
+      ${patternTable('コース・距離別',Object.entries(st.courses),'コース')}
+      ${patternTable('馬場別',Object.entries(st.goings),'馬場')}
+      ${patternTable('人気帯別',popEntries,'人気帯')}
+      ${patternTable('人気順位別',exactPopEntries,'人気')}
+      ${popularityExpectationCard(st)}
+    </div>`;
 }
 function renderDashboard(){state=loadState();if(!Array.isArray(state.races))state.races=[];if(!Array.isArray(state.history))rebuildHistory();if(!Array.isArray(state.raceCards))state.raceCards=[];const stats=jockeyStats();$('raceCount').textContent=state.races.length;$('rideCount').textContent=(state.history||[]).length;$('jockeyCount').textContent=stats.length;$('jockeyBody').innerHTML=stats.length?stats.map(x=>`<tr class="clickrow" data-jockey="${esc(x.name)}"><td><b>${esc(x.name)}</b></td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${avgRankText(x)}</td></tr>`).join(''):'<tr><td colspan="7">まだ登録された騎手がありません。</td></tr>';document.querySelectorAll('[data-jockey]').forEach(tr=>tr.addEventListener('click',()=>renderJockeyDetail(tr.dataset.jockey)));$('raceBody').innerHTML=state.races.length?[...state.races].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="5">保存レースはありません。</td></tr>';$('manageStatus').textContent=`保存レース: ${state.races.length} / 学習騎乗: ${(state.history||[]).length} / 出馬表: ${state.raceCards.length}`}
 function downloadJSON(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`shunten_backup_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href)}
@@ -239,7 +293,7 @@ $('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];
 $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('manageStatus').textContent='削除するレースがありません。';return}const r=state.races.pop();rebuildHistory();renderDashboard();$('manageStatus').textContent=`最後のレースを削除しました: ${r.meta?.date||''} ${r.meta?.venue||''} ${r.meta?.raceNo??''}R`});
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.6 起動。横表・タブ区切りの結果も読み取れます。','ok');renderDashboard()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.7 起動。人気別騎手パターンと人気なり診断に対応しました。','ok');renderDashboard()})();
 </script>
 </body>
 </html>
