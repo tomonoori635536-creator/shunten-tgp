@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v1：まず「読取」を確実にする</p>
+<p>クリーン版 v3：日付ナビ優先</p>
 </header>
 
 <main>
@@ -81,36 +81,26 @@ function parseDate(lines){
   const year=Number($('year').value)||new Date().getFullYear();
   const head=headerWindow(lines);
 
-  // 重要: 過去走の日付を拾わない。現在レースのヘッダー部分だけを見る。
+  // 日付ナビを最優先する。
+  // 例: 07/15, 07/16, 07/17, 07/18, 07/19 の中央が対象レース日。
+  const nav=[];
+  for(const s of head){
+    const m=s.match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
+    if(m) nav.push({month:+m[1],day:+m[2]});
+  }
+
+  if(nav.length){
+    const pick=nav[Math.floor(nav.length/2)];
+    return `${year}/${String(pick.month).padStart(2,'0')}/${String(pick.day).padStart(2,'0')}`;
+  }
+
+  // 日付ナビが無いページだけ、現在レースのヘッダー内の年月日を使う。
   const full=head.join(' ').match(
     /(20\d{2})[.\/年](\d{1,2})[.\/月](\d{1,2})/
   );
 
   if(full){
     return `${full[1]}/${String(full[2]).padStart(2,'0')}/${String(full[3]).padStart(2,'0')}`;
-  }
-
-  // MM/DD の日付ナビがある場合は、本日へ に最も近い日付を優先。
-  const nav=[];
-  for(let i=0;i<head.length;i++){
-    const m=head[i].match(/^(\d{1,2})\/(\d{1,2})\([^)]*\)$/);
-    if(m) nav.push({i,month:+m[1],day:+m[2]});
-  }
-
-  if(nav.length){
-    const todayIdx=head.findIndex(x=>x==='本日へ');
-    let pick=null;
-
-    if(todayIdx>=0){
-      const before=nav.filter(x=>x.i<todayIdx);
-      if(before.length) pick=before[before.length-1];
-    }
-
-    if(!pick){
-      pick=nav[Math.floor(nav.length/2)];
-    }
-
-    return `${year}/${String(pick.month).padStart(2,'0')}/${String(pick.day).padStart(2,'0')}`;
   }
 
   return '';
