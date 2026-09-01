@@ -1,0 +1,39 @@
+name: patch-v433
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v433.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch index
+        run: python .github/scripts/patch_v433.py
+      - name: Syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          assert 'クリーン版 v4.33：位置補正の強さ別に成績を検証' in s
+          assert '位置補正の強さ別診断（B 1位評価馬）' in s
+          assert 'positionBuckets' in s
+          assert '平均位置補正' in s
+          assert '平均選択単勝' in s
+          m=re.search(r'<script>(.*)</script>',s,re.S)
+          assert m
+          Path('/tmp/index.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/index.js
+      - name: Commit
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'feat: add position adjustment bucket backtest'
+          git push
