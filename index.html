@@ -5,17 +5,23 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>鞍上パターン帳 × 瞬天 TGP ENGINE</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f7f9;color:#18212b}header{background:#101820;color:#fff;padding:18px 20px}header h1{margin:0;font-size:24px}header p{margin:6px 0 0;color:#b8c5d1}main{max-width:1180px;margin:20px auto;padding:0 14px}.panel{background:#fff;border:1px solid #dde3e8;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.04)}textarea{width:100%;min-height:340px;padding:12px;border:1px solid #cbd3da;border-radius:8px;resize:vertical;font:14px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:700}.primary{background:#101820;color:#fff}.secondary{background:#e9eef2;color:#17202a}.status{margin-top:12px;padding:12px;border-radius:8px;background:#eef3f7;white-space:pre-wrap}.ok{color:#137944}.warn{color:#a05c00}.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}.chip{border:1px solid #dbe1e6;border-radius:8px;padding:10px;background:#fafbfc}.tablewrap{overflow:auto;max-height:520px;margin-top:12px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;border-bottom:1px solid #e7ebee;text-align:left;white-space:nowrap}th{background:#f7f9fa;position:sticky;top:0}.muted{color:#66727d;font-size:13px}input{padding:8px;border:1px solid #cbd3da;border-radius:7px}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f7f9;color:#18212b}header{background:#101820;color:#fff;padding:18px 20px}header h1{margin:0;font-size:24px}header p{margin:6px 0 0;color:#b8c5d1}main{max-width:1180px;margin:20px auto;padding:0 14px}.panel{background:#fff;border:1px solid #dde3e8;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.04)}textarea{width:100%;min-height:340px;padding:12px;border:1px solid #cbd3da;border-radius:8px;resize:vertical;font:14px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:700}.primary{background:#101820;color:#fff}.secondary{background:#e9eef2;color:#17202a}.status{margin-top:12px;padding:12px;border-radius:8px;background:#eef3f7;white-space:pre-wrap}.ok{color:#137944}.warn{color:#a05c00}.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}.chip{border:1px solid #dbe1e6;border-radius:8px;padding:10px;background:#fafbfc}.tablewrap{overflow:auto;max-height:520px;margin-top:12px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;border-bottom:1px solid #e7ebee;text-align:left;white-space:nowrap}th{background:#f7f9fa;position:sticky;top:0}.muted{color:#66727d;font-size:13px}input,select{padding:8px;border:1px solid #cbd3da;border-radius:7px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.tab{background:#e9eef2;color:#17202a}.tab.active{background:#101820;color:#fff}.view{display:none}.view.active{display:block}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}.big{font-size:24px;font-weight:800}.clickrow{cursor:pointer}.clickrow:hover{background:#f2f6f8}.danger{background:#8d1c1c;color:#fff}.detailbox{margin-top:14px;padding:14px;background:#f7f9fa;border-radius:10px;border:1px solid #e0e5e9}
 </style>
 </head>
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v3：日付ナビ優先</p>
+<p>クリーン版 v4：結果保存・騎手集計</p>
 </header>
 
 <main>
-<section class="panel">
+<div class="tabs">
+<button class="btn tab active" data-view="inputView">データ入力</button>
+<button class="btn tab" data-view="jockeyView">騎手一覧</button>
+<button class="btn tab" data-view="manageView">保存データ</button>
+</div>
+
+<section class="panel view active" id="inputView">
 <h2>データ入力</h2>
 <p>netkeiba / NAR の出馬表または結果ページを、そのまま貼り付けてください。</p>
 
@@ -37,12 +43,47 @@
 <div id="status" class="status">待機中</div>
 <div id="preview"></div>
 </section>
+
+<section class="panel view" id="jockeyView">
+<h2>騎手一覧</h2>
+<div class="summary">
+<div class="chip"><b>保存レース</b><div class="big" id="raceCount">0</div></div>
+<div class="chip"><b>学習騎乗</b><div class="big" id="rideCount">0</div></div>
+<div class="chip"><b>登録騎手</b><div class="big" id="jockeyCount">0</div></div>
+</div>
+<p class="muted">騎手名をクリックすると、競馬場・人気別の成績を確認できます。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>騎手</th><th>騎乗</th><th>1着</th><th>勝率</th><th>3着内</th><th>複勝率</th><th>平均着順</th></tr></thead>
+<tbody id="jockeyBody"></tbody>
+</table></div>
+<div id="jockeyDetail" class="detailbox">騎手を選択してください。</div>
+</section>
+
+<section class="panel view" id="manageView">
+<h2>保存データ</h2>
+<div class="row">
+<button class="btn secondary" id="exportBtn">JSON書き出し</button>
+<label class="btn secondary" style="display:inline-block">JSON読込<input type="file" id="importFile" accept="application/json,.json" style="display:none"></label>
+<button class="btn secondary" id="deleteLastBtn">最後のレースを削除</button>
+</div>
+<div id="manageStatus" class="status">保存データを確認できます。</div>
+<div class="tablewrap"><table>
+<thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>レース名</th><th>頭数</th></tr></thead>
+<tbody id="raceBody"></tbody>
+</table></div>
+</section>
 </main>
 
 <script>
 const KEY='jockeyPatternBook_v2';
 const YEAR_KEY='jockeyPatternBook_collectionYear';
 let parsed=null;
+let state=loadState();
+
+function emptyState(){return {history:[],races:[],horseHistory:[],raceCards:[],evaluations:[],model:{}}}
+function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY)||'null');return x&&typeof x==='object'?Object.assign(emptyState(),x):emptyState()}catch(e){return emptyState()}}
+function persist(){localStorage.setItem(KEY,JSON.stringify(state))}
+function rebuildHistory(){state.history=(state.races||[]).flatMap(r=>(r.rows||[]).map(x=>({...x,...(r.meta||{})})));persist()}
 
 const $=id=>document.getElementById(id);
 const norm=s=>String(s??'').replace(/\u3000/g,' ').replace(/\s+/g,' ').trim();
@@ -535,28 +576,6 @@ $('saveBtn').addEventListener('click',()=>{
     return;
   }
 
-  let state={
-    history:[],
-    races:[],
-    horseHistory:[],
-    raceCards:[],
-    evaluations:[],
-    model:{}
-  };
-
-  try{
-    const old=JSON.parse(
-      localStorage.getItem(KEY)||'null'
-    );
-
-    if(
-      old &&
-      typeof old==='object'
-    ){
-      state=Object.assign(state,old);
-    }
-  }catch(e){}
-
   const key=[
     parsed.meta.date,
     parsed.meta.venue,
@@ -583,22 +602,87 @@ $('saveBtn').addEventListener('click',()=>{
     state.races.push(obj);
   }
 
-  state.history=state.races.flatMap(
-    r=>(r.rows||[]).map(
-      x=>({...x,...r.meta})
-    )
-  );
-
-  localStorage.setItem(
-    KEY,
-    JSON.stringify(state)
-  );
+  rebuildHistory();
+  renderDashboard();
 
   setStatus(
     `✓ 保存しました: ${parsed.meta.date} ${parsed.meta.venue} ${parsed.meta.raceNo}R / ${parsed.rows.length}頭`,
     'ok'
   );
 });
+
+
+function pct(n,d){return d?`${(100*n/d).toFixed(1)}%`:'0.0%'}
+
+function jockeyStats(){
+  const map=new Map();
+  for(const r of state.history||[]){
+    if(!r.jockey || !Number.isFinite(Number(r.rank))) continue;
+    const k=r.jockey;
+    if(!map.has(k)) map.set(k,{name:k,rides:0,wins:0,places:0,rankSum:0,venues:{},pops:{}});
+    const x=map.get(k), rank=Number(r.rank);
+    x.rides++; x.rankSum+=rank;
+    if(rank===1)x.wins++;
+    if(rank<=3)x.places++;
+    const v=r.venue||'不明';
+    if(!x.venues[v])x.venues[v]={rides:0,wins:0,places:0};
+    x.venues[v].rides++; if(rank===1)x.venues[v].wins++; if(rank<=3)x.venues[v].places++;
+    const pop=Number(r.pop);
+    if(Number.isFinite(pop)){
+      const b=pop===1?'1人気':pop<=3?'2-3人気':pop<=6?'4-6人気':'7人気以下';
+      if(!x.pops[b])x.pops[b]={rides:0,wins:0,places:0};
+      x.pops[b].rides++; if(rank===1)x.pops[b].wins++; if(rank<=3)x.pops[b].places++;
+    }
+  }
+  return [...map.values()].sort((a,b)=>b.rides-a.rides||b.wins-a.wins||a.name.localeCompare(b.name,'ja'));
+}
+
+function renderJockeyDetail(name){
+  const st=jockeyStats().find(x=>x.name===name);
+  if(!st){$('jockeyDetail').textContent='騎手を選択してください。';return}
+  const venueRows=Object.entries(st.venues).sort((a,b)=>b[1].rides-a[1].rides).map(([v,x])=>`<tr><td>${esc(v)}</td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td></tr>`).join('');
+  const popOrder=['1人気','2-3人気','4-6人気','7人気以下'];
+  const popRows=popOrder.filter(k=>st.pops[k]).map(k=>{const x=st.pops[k];return `<tr><td>${k}</td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td></tr>`}).join('');
+  $('jockeyDetail').innerHTML=`<h3>${esc(st.name)}</h3><p><b>${st.rides}鞍</b> / 1着 ${st.wins}（${pct(st.wins,st.rides)}） / 3着内 ${st.places}（${pct(st.places,st.rides)}）</p><h4>競馬場別</h4><div class="tablewrap"><table><tr><th>競馬場</th><th>騎乗</th><th>1着</th><th>勝率</th><th>3着内</th><th>複勝率</th></tr>${venueRows||'<tr><td colspan="6">データなし</td></tr>'}</table></div><h4>人気別</h4><div class="tablewrap"><table><tr><th>人気</th><th>騎乗</th><th>1着</th><th>勝率</th><th>3着内</th><th>複勝率</th></tr>${popRows||'<tr><td colspan="6">人気データなし</td></tr>'}</table></div>`;
+}
+
+function renderDashboard(){
+  state=loadState();
+  if(!Array.isArray(state.races))state.races=[];
+  if(!Array.isArray(state.history))rebuildHistory();
+  const stats=jockeyStats();
+  $('raceCount').textContent=state.races.length;
+  $('rideCount').textContent=(state.history||[]).length;
+  $('jockeyCount').textContent=stats.length;
+  $('jockeyBody').innerHTML=stats.length?stats.map(x=>`<tr class="clickrow" data-jockey="${esc(x.name)}"><td><b>${esc(x.name)}</b></td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${(x.rankSum/x.rides).toFixed(2)}</td></tr>`).join(''):'<tr><td colspan="7">まだ保存された結果がありません。</td></tr>';
+  document.querySelectorAll('[data-jockey]').forEach(tr=>tr.addEventListener('click',()=>renderJockeyDetail(tr.dataset.jockey)));
+  $('raceBody').innerHTML=state.races.length?[...state.races].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="5">保存レースはありません。</td></tr>';
+  $('manageStatus').textContent=`保存レース: ${state.races.length} / 学習騎乗: ${(state.history||[]).length}`;
+}
+
+function downloadJSON(){
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`shunten_backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href);
+}
+
+$('exportBtn').addEventListener('click',downloadJSON);
+$('importFile').addEventListener('change',async e=>{
+  const f=e.target.files?.[0]; if(!f)return;
+  try{const x=JSON.parse(await f.text()); if(!x||typeof x!=='object')throw new Error(); state=Object.assign(emptyState(),x); rebuildHistory(); renderDashboard(); $('manageStatus').textContent='✓ JSONを読み込みました。';}
+  catch(err){$('manageStatus').textContent='JSONを読み込めませんでした。';}
+  e.target.value='';
+});
+$('deleteLastBtn').addEventListener('click',()=>{
+  if(!state.races.length){$('manageStatus').textContent='削除するレースがありません。';return}
+  const r=state.races.pop(); rebuildHistory(); renderDashboard(); $('manageStatus').textContent=`最後のレースを削除しました: ${r.meta?.date||''} ${r.meta?.venue||''} ${r.meta?.raceNo??''}R`;
+});
+
+document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  btn.classList.add('active'); $(btn.dataset.view).classList.add('active');
+  if(btn.dataset.view!=='inputView')renderDashboard();
+}));
 
 $('clearBtn').addEventListener('click',()=>{
   $('raw').value='';
@@ -625,9 +709,10 @@ $('clearBtn').addEventListener('click',()=>{
   );
 
   setStatus(
-    '✓ クリーン版 v1 起動。まずは「今すぐ読み取る」で確認してください。',
+    '✓ クリーン版 v4 起動。結果を読み取って保存すると騎手集計へ反映されます。',
     'ok'
   );
+  renderDashboard();
 
 })();
 </script>
