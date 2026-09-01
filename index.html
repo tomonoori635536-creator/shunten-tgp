@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.32：並び補正の中身とデータ由来を分解</p>
+<p>クリーン版 v4.33：位置補正の強さ別に成績を検証</p>
 </header>
 <main>
 <div class="tabs">
@@ -776,6 +776,14 @@ function runChronologicalBacktest(){
     {key:'m80',name:'仮 80:20 馬80＋騎手20',score:'scoreM80'}
   ];
   const stats=Object.fromEntries(variants.map(v=>[v.key,{name:v.name,n:0,top1Win:0,top1Place:0,winnerTop3:0,exactTop3:0,roiN:0,stake:0,returnYen:0,winOdds:[],oddsBands:{low:{n:0,stake:0,ret:0,wins:0},mid:{n:0,stake:0,ret:0,wins:0},high:{n:0,stake:0,ret:0,wins:0},long:{n:0,stake:0,ret:0,wins:0}}}]));
+  const positionBuckets={
+    p3:{label:'+3以上',n:0,wins:0,places:0,adjSum:0,oddsN:0,oddsSum:0,stake:0,ret:0},
+    p1:{label:'+1〜+3',n:0,wins:0,places:0,adjSum:0,oddsN:0,oddsSum:0,stake:0,ret:0},
+    mid:{label:'-1〜+1',n:0,wins:0,places:0,adjSum:0,oddsN:0,oddsSum:0,stake:0,ret:0},
+    m1:{label:'-3〜-1',n:0,wins:0,places:0,adjSum:0,oddsN:0,oddsSum:0,stake:0,ret:0},
+    m3:{label:'-3以下',n:0,wins:0,places:0,adjSum:0,oddsN:0,oddsSum:0,stake:0,ret:0}
+  };
+  const positionBucketKey=(adj)=>adj>=3?'p3':adj>=1?'p1':adj>-1?'mid':adj>-3?'m1':'m3';
   const details=[];
   const highPayoutDiagnostics=[];
   let skipped=0;
@@ -812,6 +820,24 @@ function runChronologicalBacktest(){
         scoreM50:blend(0.50),scoreM55:blend(0.55),scoreM60:blend(0.60),scoreM70:blend(0.70),scoreM80:blend(0.80)};
     });
     const actualTop3=new Set(resultRows.filter(x=>Number(x.rank)>=1&&Number(x.rank)<=3).map(x=>Number(x.num)));
+    const bRankedForPosition=backtestRankRows(scored,'scoreB');
+    if(bRankedForPosition.length>=3){
+      const bTop=bRankedForPosition[0];
+      const bResult=resultByNum.get(Number(bTop.row?.num));
+      const posAdj=Number(bTop.lineupDetail?.posAdj);
+      if(Number.isFinite(posAdj)&&bResult){
+        const pb=positionBuckets[positionBucketKey(posAdj)];
+        pb.n++;pb.adjSum+=posAdj;
+        const rank=Number(bResult.rank);
+        if(rank===1)pb.wins++;
+        if(rank<=3)pb.places++;
+        const odds=Number(bResult.odds);
+        if(Number.isFinite(odds)&&odds>0){
+          pb.oddsN++;pb.oddsSum+=odds;pb.stake+=100;
+          if(rank===1)pb.ret+=Math.round(odds*100);
+        }
+      }
+    }
     const rankOf=(key,num)=>{const arr=backtestRankRows(scored,key);const i=arr.findIndex(x=>Number(x.row?.num)===Number(num));return i>=0?i+1:null};
     const winnerScored=scored.find(x=>Number(x.row?.num)===Number(winner.num));
     const winnerOdds=Number(winner?.odds);
@@ -865,7 +891,7 @@ function runChronologicalBacktest(){
     if(anyEvaluated)details.push(rowDetail);else skipped++;
   }
   highPayoutDiagnostics.sort((a,b)=>b.odds-a.odds||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
-  return {variants,stats,details,highPayoutDiagnostics,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
+  return {variants,stats,details,highPayoutDiagnostics,positionBuckets,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
 }
 function renderBacktest(){
   const bt=runChronologicalBacktest();
@@ -916,7 +942,17 @@ function renderBacktest(){
     return bits.join(' / ')||'複合要因';
   };
   const highDiag=(bt.highPayoutDiagnostics||[]).length?`<h3>高配当1位の要因診断</h3><div class="tablewrap"><table><thead><tr><th>レース</th><th>勝ち馬</th><th>単勝</th><th>人気</th><th>騎手</th><th>A騎手適性</th><th>並び合計</th><th>位置補正</th><th>相手比較補正</th><th>比較相手</th><th>過去比較</th><th>データ由来</th><th>B点 / 順位</th><th>当日R補正</th><th>D点 / 順位</th><th>H馬能力 / 順位</th><th>55:45 / 順位</th><th>なぜ拾えたか</th></tr></thead><tbody>${bt.highPayoutDiagnostics.map(x=>`<tr><td>${esc(x.date)} ${esc(x.venue)} ${x.raceNo}R</td><td><b>${x.num} ${esc(x.name)}</b></td><td><b>${x.odds.toFixed(1)}倍</b></td><td>${x.pop??'-'}</td><td>${esc(x.jockey)}</td><td>${scoreText(x.jockeyBase)} / ${rankText(x.rankA)}</td><td><b>${signed(x.lineupAdj)}</b></td><td>${signed(x.posAdj)}</td><td>${signed(x.pairAdj)}</td><td>${x.pairOpponents}人</td><td>${x.pairMatches}回</td><td class="btNote">位置 ${x.posN}鞍（実${x.posLiveN}/復${x.posRecoveredN}）<br>相手比較 ${x.pairMatches}回（実${x.pairLiveMatches}/復${x.pairRecoveredMatches}）</td><td>${scoreText(x.scoreB)} / ${rankText(x.rankB)}</td><td>${signed(x.dayAdj)}</td><td>${scoreText(x.scoreD)} / ${rankText(x.rankD)}</td><td>${scoreText(x.horseScore)} / ${rankText(x.rankH)}</td><td>${scoreText(x.scoreM55)} / ${rankText(x.rankM55)}</td><td class="btNote">${esc(highReason(x))}</td></tr>`).join('')}</tbody></table></div><p class="muted">並び合計は「位置補正＋相手比較補正」（最終的に±8点で制限）です。実=保存済みの実結果レース、復=過去馬柱から安全復元した並び学習データ。相手比較回数は、今回一緒に乗る騎手との過去の内外関係が一致した比較の合計です。重み自体は変更していません。</p>`:`<h3>高配当1位の要因診断</h3><p class="muted">10倍以上の勝ち馬をBまたはDで1位評価したレースはまだありません。</p>`;
-  $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${highDiag}`;
+  const positionOrder=['p3','p1','mid','m1','m3'];
+  const positionRow=(key)=>{
+    const x=bt.positionBuckets?.[key];
+    if(!x||!x.n)return `<tr><td><b>${esc(x?.label||key)}</b></td><td>0</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`;
+    const avgAdj=x.adjSum/x.n;
+    const avgOdds=x.oddsN?x.oddsSum/x.oddsN:null;
+    const roi=x.stake?100*x.ret/x.stake:null;
+    return `<tr><td><b>${esc(x.label)}</b></td><td>${x.n}</td><td>${signed(avgAdj)}</td><td>${backtestPct(x.wins,x.n)} <span class="muted">(${x.wins}/${x.n})</span></td><td>${backtestPct(x.places,x.n)} <span class="muted">(${x.places}/${x.n})</span></td><td>${roi==null?'-':roi.toFixed(1)+'%'}<div class="muted">ROI対象 ${x.oddsN}R / 投資${x.stake.toLocaleString()}円 / 払戻${x.ret.toLocaleString()}円</div></td><td>${avgOdds==null?'-':avgOdds.toFixed(2)+'倍'}</td></tr>`;
+  };
+  const positionDiag=`<h3>位置補正の強さ別診断（B 1位評価馬）</h3><div class="tablewrap"><table><thead><tr><th>位置補正帯</th><th>該当R</th><th>平均位置補正</th><th>1着率</th><th>3着内率</th><th>単勝回収率</th><th>平均選択単勝</th></tr></thead><tbody>${positionOrder.map(positionRow).join('')}</tbody></table></div><p class="muted">各レースでB（騎手適性＋並び）が1位評価した馬を、その馬の「位置補正」だけで5区分に分けた診断です。+3以上が本当に好成績か、位置補正が強すぎないかを確認します。境界は +3以上 / +1以上3未満 / -1より大きく+1未満 / -3より大きく-1以下 / -3以下 として重複なく集計します。重みは変更していません。</p>`;
+  $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${highDiag}${positionDiag}`;
   $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th>${bt.variants.map(v=>`<th>${esc(v.name)} 1位</th>`).join('')}</tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];if(!x)return '<td class="muted">--</td>';return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}<div class="muted">単勝 ${x.odds??'-'}</div></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -975,7 +1011,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.32 起動。並び補正を位置・相手比較・実結果/安全復元まで分解表示します。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.33 起動。Bの1位評価馬を位置補正の強さ別に検証できます。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
