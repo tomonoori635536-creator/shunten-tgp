@@ -1,0 +1,54 @@
+name: patch-v415
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v415.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch recovered history support
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old="function emptyState(){return {history:[],races:[],horseHistory:[],raceCards:[],evaluations:[],model:{}}}"
+          new="function emptyState(){return {history:[],seedHistory:[],races:[],horseHistory:[],raceCards:[],evaluations:[],model:{}}}"
+          assert old in s, 'emptyState target missing'
+          s=s.replace(old,new,1)
+          old="function rebuildHistory(){state.history=(state.races||[]).flatMap(r=>(r.rows||[]).map(x=>({...x,...(r.meta||{})})));persist()}"
+          new="function rebuildHistory(){const live=(state.races||[]).flatMap(r=>(r.rows||[]).map(x=>({...x,...(r.meta||{})})));const seed=Array.isArray(state.seedHistory)?state.seedHistory:[];const seen=new Set();state.history=[...live,...seed].filter(r=>{const k=[r.date||'',r.venue||'',r.name||'',r.num??'',r.jockey||'',r.rank??''].join('|');if(seen.has(k))return false;seen.add(k);return true});persist()}"
+          assert old in s, 'rebuildHistory target missing'
+          s=s.replace(old,new,1)
+          s=s.replace('クリーン版 v4.14：馬柱(5走/9走)の出馬表に対応','クリーン版 v4.15：過去馬柱973騎乗を学習データとして取込対応',1)
+          old="$('manageStatus').textContent=`保存レース: ${state.races.length} / 学習騎乗: ${(state.history||[]).length} / 出馬表: ${state.raceCards.length}`"
+          if old in s:
+            new="$('manageStatus').textContent=`保存レース: ${state.races.length} / 学習騎乗: ${(state.history||[]).length}（復元 ${(state.seedHistory||[]).length}） / 出馬表: ${state.raceCards.length}`"
+            s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+      - name: Syntax check
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          m=re.search(r'<script>(.*)</script>',s,re.S)
+          assert m
+          Path('/tmp/index.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/index.js
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'feat: support recovered jockey history seed data'
+          git push
