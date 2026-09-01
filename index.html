@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.8：出馬表に騎手適性スコア</p>
+<p>クリーン版 v4.9：出馬表テーブル読取・騎手適性スコア</p>
 </header>
 <main>
 <div class="tabs">
@@ -149,25 +149,72 @@ function parseResultRows(lines){
   }
   return dedupe(out,r=>`${r.rank}|${r.num}|${r.name}`);
 }
+function isCardNoise(s){
+  return !s||/^(?:--|印|登録|グループ|編集|馬メモ|切替)$/.test(s)||/^\[(?:Select|Input|Button:.*)\]$/.test(s);
+}
+function cardRowStartAt(lines,i){
+  const joined=String(lines[i]||'').match(/^([1-8])\s+([1-9]|1\d|2\d)\s*$/);
+  if(joined)return {frame:Number(joined[1]),num:Number(joined[2]),p:i+1};
+  if(/^[1-8]$/.test(lines[i]||'')&&/^([1-9]|1\d|2\d)$/.test(lines[i+1]||'')){
+    return {frame:Number(lines[i]),num:Number(lines[i+1]),p:i+2};
+  }
+  return null;
+}
+function hasSexAgeSoon(lines,p){
+  for(let j=p;j<Math.min(lines.length,p+8);j++)if(isSexAge(lines[j]))return j;
+  return -1;
+}
+function nextCardRowIndex(lines,from){
+  for(let i=from;i<lines.length-1;i++){
+    const st=cardRowStartAt(lines,i);if(!st)continue;
+    if(hasSexAgeSoon(lines,st.p)>=0)return i;
+  }
+  return lines.length;
+}
 function parseRaceCard(lines){
-  const out=[];const start=Math.max(0,lines.findIndex(x=>/発走/.test(x)));
-  for(let i=start;i<lines.length-8;i++){
-    const m=lines[i].match(/^([1-8])\s+([1-9]|1\d|2\d)\s*$/);if(!m) continue;
-    const frame=+m[1],num=+m[2];let p=i+1;if(lines[p]==='--') p++;
-    const name=lines[p++];if(!name||/^(取消|除外|中止)$/.test(name)) continue;
-    let pop=null,odds=null,sexAge='',jockey='';
-    for(let j=p;j<Math.min(lines.length,p+18);j++){
-      let pm=lines[j].match(/^(\d+(?:\.\d+)?)\s*\((\d+)人気\)$/);
-      if(pm){odds=Number(pm[1]);pop=Number(pm[2])}
-      pm=lines[j].match(/^(\d+)人気$/);
-      if(pm&&pop==null) pop=Number(pm[1]);
-      if(/^\d+(?:\.\d+)$/.test(lines[j])&&/^(\d+)人気$/.test(lines[j+1]||'')){
-        odds=Number(lines[j]);pop=Number((lines[j+1].match(/^(\d+)人気$/)||[])[1]);
-      }
-      if(!sexAge&&/^(牡|牝|セ)\d+/.test(lines[j])) sexAge=lines[j];
-      if(sexAge&&!jockey&&j>p&&looksJockey(lines[j])&&/^\d{2,3}(?:\.\d)?$/.test(lines[j+1]||'')) jockey=lines[j];
+  const out=[];
+  const start=Math.max(0,lines.findIndex(x=>/発走/.test(x)));
+  for(let i=start;i<lines.length-3;i++){
+    const st=cardRowStartAt(lines,i);if(!st)continue;
+    const {frame,num}=st;
+    const sexIdx=hasSexAgeSoon(lines,st.p);if(sexIdx<0)continue;
+    const nameParts=[];
+    for(let j=st.p;j<sexIdx;j++)if(!isCardNoise(lines[j]))nameParts.push(lines[j]);
+    if(!nameParts.length)continue;
+    let name=String(nameParts[nameParts.length-1]).replace(/\s+Image$/,'').trim();
+    if(!name||/^(取消|除外|中止)$/.test(name))continue;
+    const sexAge=lines[sexIdx];
+    let burdenIdx=-1;
+    for(let j=sexIdx+1;j<Math.min(lines.length,sexIdx+5);j++){
+      if(/^\d{2,3}(?:\.\d)?$/.test(lines[j])){burdenIdx=j;break}
     }
-    if(name&&(sexAge||jockey)) out.push({frame,num,name,jockey,pop,odds,rank:null});
+    if(burdenIdx<0)continue;
+    let jockey='',jockeyIdx=-1;
+    for(let j=burdenIdx+1;j<Math.min(lines.length,burdenIdx+5);j++){
+      if(!isCardNoise(lines[j])&&looksJockey(lines[j])){jockey=lines[j];jockeyIdx=j;break}
+    }
+    if(!jockey)continue;
+    let pop=null,odds=null;
+    const boundary=nextCardRowIndex(lines,jockeyIdx+1);
+    const scanEnd=Math.min(boundary,jockeyIdx+12,lines.length);
+    for(let j=jockeyIdx+1;j<scanEnd;j++){
+      let m=String(lines[j]).match(/^(\d+(?:\.\d+)?)\s*\((\d+)人気\)$/);
+      if(m){odds=Number(m[1]);pop=Number(m[2]);break}
+      m=String(lines[j]).match(/^(\d+)人気$/);
+      if(m){pop=Number(m[1]);continue}
+      if(/^\d+(?:\.\d+)?$/.test(lines[j]||'')){
+        const n=Number(lines[j]);
+        const next=String(lines[j+1]||'');
+        const pm=next.match(/^(\d+)人気$/);
+        if(pm){odds=n;pop=Number(pm[1]);break}
+        if(/^\d{1,2}$/.test(next)){
+          const candidate=Number(next);
+          if(candidate>=1&&candidate<=20){odds=n;pop=candidate;break}
+        }
+      }
+    }
+    out.push({frame,num,name,jockey,pop,odds,rank:null,sexAge});
+    i=Math.max(i,sexIdx-1);
   }
   return dedupe(out,r=>`${r.num}|${r.name}`);
 }
@@ -200,7 +247,7 @@ $('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];
 $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('manageStatus').textContent='削除するレースがありません。';return}const r=state.races.pop();rebuildHistory();renderDashboard();$('manageStatus').textContent=`最後のレースを削除しました: ${r.meta?.date||''} ${r.meta?.venue||''} ${r.meta?.raceNo??''}R`});
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.8 起動。出馬表で騎手適性スコアを表示します。','ok');renderDashboard()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.9 起動。出馬表テーブル読取と騎手適性スコアに対応しました。','ok');renderDashboard()})();
 </script>
 </body>
 </html>
