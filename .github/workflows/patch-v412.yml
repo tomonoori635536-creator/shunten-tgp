@@ -1,0 +1,124 @@
+name: patch-v412
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v412.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch parser
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          start=s.index('function parseRaceCard(lines){')
+          end=s.index('\nfunction dedupe(arr,keyFn)',start)
+          new=r'''function findCardTableStart(lines){
+            for(let i=0;i<lines.length;i++){
+              const near=lines.slice(i,i+14).join(' ');
+              if(/馬名/.test(near)&&/性齢/.test(near)&&/斤量/.test(near)&&/騎手/.test(near)&&/馬体重/.test(near)&&/人気/.test(near))return i;
+            }
+            return -1;
+          }
+          function parseRaceCard(lines){
+            const out=[];
+            const header=findCardTableStart(lines);
+            if(header<0)return out;
+            let end=lines.length;
+            for(let i=header+1;i<lines.length;i++){
+              if(/選んだ馬のオッズを見る|Myレース|※結果・成績・オッズ/.test(lines[i])){end=i;break}
+            }
+            const tokens=[];
+            for(let i=header;i<end;i++){
+              const s=String(lines[i]||'').trim();
+              if(!s)continue;
+              for(const part of s.split(/\s+/)){
+                const t=String(part||'').trim();
+                if(t)tokens.push(t);
+              }
+            }
+            const noise=v=>isCardNoise(v)||/^(?:Image|お気に入り馬|マスター|レース別馬メモ|閉じる|削除|保存|---)$/.test(v);
+            for(let sexIdx=0;sexIdx<tokens.length;sexIdx++){
+              if(!isSexAge(tokens[sexIdx]))continue;
+              let burdenIdx=-1;
+              for(let j=sexIdx+1;j<Math.min(tokens.length,sexIdx+4);j++){
+                if(/^\d{2,3}(?:\.\d)?$/.test(tokens[j])){burdenIdx=j;break}
+              }
+              if(burdenIdx<0)continue;
+              let jockey='',jockeyIdx=-1;
+              for(let j=burdenIdx+1;j<Math.min(tokens.length,burdenIdx+4);j++){
+                const v=tokens[j];
+                if(!noise(v)&&looksJockey(v)&&!/^愛知$/.test(v)){jockey=v;jockeyIdx=j;break}
+              }
+              if(!jockey)continue;
+              let name='',nameIdx=-1;
+              for(let j=sexIdx-1;j>=Math.max(0,sexIdx-8);j--){
+                const v=tokens[j];
+                if(noise(v)||/^\d+(?:\.\d+)?$/.test(v)||/^\d+\(.+\)$/.test(v)||/^(?:愛知|取消|除外|中止)$/.test(v))continue;
+                if(/^(?:枠|馬|番|印|馬名|性齢|斤量|騎手|厩舎|馬体重|オッズ|人気)$/.test(v))continue;
+                name=v.replace(/Image$/,'').trim();nameIdx=j;break;
+              }
+              if(!name||nameIdx<0)continue;
+              const nums=[];
+              for(let j=nameIdx-1;j>=Math.max(0,nameIdx-7);j--){
+                const v=tokens[j];
+                if(noise(v))continue;
+                if(/^\d{1,2}$/.test(v)){
+                  const n=Number(v);
+                  if(n>=1&&n<=20)nums.push(n);
+                  if(nums.length>=2)break;
+                }
+              }
+              if(!nums.length)continue;
+              const num=nums[0],frame=nums.length>1?nums[1]:null;
+              let pop=null,odds=null,nextSex=tokens.length;
+              for(let j=sexIdx+1;j<tokens.length;j++)if(isSexAge(tokens[j])){nextSex=j;break}
+              for(let j=jockeyIdx+1;j<Math.min(nextSex,jockeyIdx+16);j++){
+                const cur=tokens[j],next=tokens[j+1]||'';
+                let m=cur.match(/^(\d+(?:\.\d+)?)\((\d+)人気\)$/);
+                if(m){odds=Number(m[1]);pop=Number(m[2]);break}
+                m=cur.match(/^(\d+)人気$/);
+                if(m){pop=Number(m[1]);continue}
+                if(/^\d+(?:\.\d+)?$/.test(cur)&&/^\d{1,2}$/.test(next)){
+                  const o=Number(cur),candidate=Number(next);
+                  if(o>=1&&candidate>=1&&candidate<=20){odds=o;pop=candidate;break}
+                }
+              }
+              out.push({frame,num,name,jockey,pop,odds,rank:null,sexAge:tokens[sexIdx]});
+            }
+            return dedupe(out,r=>`${r.num}|${r.name}`);
+          }'''
+          s=s[:start]+new+s[end:]
+          old="function parseAll(raw){const lines=linesOf(raw);if(!lines.length)return {error:'入力が空です'};const meta=parseMeta(lines),resultRows=parseResultRows(lines),cardRows=resultRows.length>=3?[]:parseRaceCard(lines),mode=resultRows.length>=3?'result':cardRows.length?'card':'unknown';return {meta,mode,rows:mode==='result'?resultRows:cardRows,lines}}"
+          repl="function parseAll(raw){const lines=linesOf(raw);if(!lines.length)return {error:'入力が空です'};const meta=parseMeta(lines),hasCard=findCardTableStart(lines)>=0,cardRows=hasCard?parseRaceCard(lines):[],resultRows=hasCard?[]:parseResultRows(lines),mode=cardRows.length?'card':resultRows.length>=3?'result':'unknown';return {meta,mode,rows:mode==='result'?resultRows:cardRows,lines}}"
+          if old not in s: raise SystemExit('parseAll target not found')
+          s=s.replace(old,repl)
+          s=s.replace('クリーン版 v4.11：空白区切り出馬表に対応','クリーン版 v4.12：出馬表本体だけを限定読取')
+          s=s.replace('✓ クリーン版 v4.11 起動。空白区切りの出馬表にも対応しました。','✓ クリーン版 v4.12 起動。過去走を除外し、出馬表本体だけを読み取ります。')
+          p.write_text(s,encoding='utf-8')
+      - name: Syntax check
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          m=re.search(r'<script>(.*)</script>',s,re.S)
+          Path('/tmp/index.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/index.js
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'fix: isolate current race card table from past performances'
+          git push
