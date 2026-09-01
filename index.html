@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.28：馬55×騎手45も仮比較</p>
+<p>クリーン版 v4.29：単勝回収率も仮検証</p>
 </header>
 <main>
 <div class="tabs">
@@ -40,7 +40,7 @@
 
 <section class="panel view" id="backtestView">
 <h2>時系列バックテスト</h2>
-<p>保存済みの「出馬表→結果」を使って、対象レースより後の結果を見ない真の時系列で比較します。馬能力Hと現在採用中の騎手Bを50:50・55:45・60:40・70:30・80:20で仮合成します。ここで最良でも正式採用にはせず、データ増加後に再検証します。取消・除外など結果に存在しない馬は評価対象から外します。</p>
+<p>保存済みの「出馬表→結果」を使って、対象レースより後の結果を見ない真の時系列で比較します。馬能力Hと現在採用中の騎手Bを50:50・55:45・60:40・70:30・80:20で仮合成します。さらに各方式の1位評価馬を単勝100円固定で買った場合の確定単勝オッズ回収率も仮検証します。ここで最良でも正式採用にはせず、データ増加後に再検証します。取消・除外など結果に存在しない馬は評価対象から外します。</p>
 <div class="row"><button class="btn primary" id="backtestBtn">バックテスト再計算</button><span class="muted">A=騎手適性 / B=＋並び / C=＋当日R / D=＋並び＋当日R / H=馬能力 / 仮=馬:騎手 50:50 / 55:45 / 60:40 / 70:30 / 80:20</span></div>
 <div class="summary" style="margin-top:14px"><div class="chip"><b>保存結果</b><div class="big" id="btResultCount">0</div></div><div class="chip"><b>保存出馬表</b><div class="big" id="btCardCount">0</div></div><div class="chip"><b>評価対象</b><div class="big" id="btEvalCount">0</div></div><div class="chip"><b>除外</b><div class="big" id="btSkipCount">0</div></div></div>
 <div id="backtestStatus" class="status">バックテストタブを開くと計算します。</div>
@@ -768,7 +768,7 @@ function runChronologicalBacktest(){
     {key:'m70',name:'仮 70:30 馬70＋騎手30',score:'scoreM70'},
     {key:'m80',name:'仮 80:20 馬80＋騎手20',score:'scoreM80'}
   ];
-  const stats=Object.fromEntries(variants.map(v=>[v.key,{name:v.name,n:0,top1Win:0,top1Place:0,winnerTop3:0,exactTop3:0}]));
+  const stats=Object.fromEntries(variants.map(v=>[v.key,{name:v.name,n:0,top1Win:0,top1Place:0,winnerTop3:0,exactTop3:0,roiN:0,stake:0,returnYen:0}]));
   const details=[];
   let skipped=0;
   for(const pair of backtestRacePairs()){
@@ -813,9 +813,15 @@ function runChronologicalBacktest(){
       if(Number(top1Result?.rank)===1)st.top1Win++;
       if(Number(top1Result?.rank)<=3)st.top1Place++;
       if(top3.some(x=>Number(x.row.num)===Number(winner.num)))st.winnerTop3++;
+      const winOdds=Number(top1Result?.odds);
+      if(Number.isFinite(winOdds)&&winOdds>0){
+        st.roiN++;
+        st.stake+=100;
+        if(Number(top1Result?.rank)===1)st.returnYen+=Math.round(winOdds*100);
+      }
       const predTop3=new Set(top3.map(x=>Number(x.row.num)));
       if(actualTop3.size===3&&[...actualTop3].every(n=>predTop3.has(n)))st.exactTop3++;
-      rowDetail.tops[v.key]={num:Number(top1.row.num),name:top1.row.name||'',hit:Number(top1Result?.rank)===1,place:Number(top1Result?.rank)<=3};
+      rowDetail.tops[v.key]={num:Number(top1.row.num),name:top1.row.name||'',hit:Number(top1Result?.rank)===1,place:Number(top1Result?.rank)<=3,odds:Number.isFinite(Number(top1Result?.odds))?Number(top1Result.odds):null};
     }
     if(anyEvaluated)details.push(rowDetail);else skipped++;
   }
@@ -840,9 +846,12 @@ function renderBacktest(){
     const rates=bt.variants.filter(v=>bt.stats[v.key].n>0).map(v=>bt.stats[v.key][m]/bt.stats[v.key].n);
     best[m]=rates.length?Math.max(...rates):0;
   }
+  const roiRates=bt.variants.filter(v=>bt.stats[v.key].stake>0).map(v=>bt.stats[v.key].returnYen/bt.stats[v.key].stake);
+  const bestRoi=roiRates.length?Math.max(...roiRates):0;
   const cell=(v,m)=>{const st=bt.stats[v.key];if(!st.n)return '<td>-</td>';const rate=st[m]/st.n,cls=Math.abs(rate-best[m])<1e-12?' class="bestCell"':'';return `<td${cls}>${backtestPct(st[m],st.n)} <span class="muted">(${st[m]}/${st.n})</span></td>`};
-  $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}</tr>`}).join('')}</tbody></table></div><p class="muted">50:50・55:45・60:40・70:30・80:20は暫定比較です。今回の最高値を固定せず、100R・150Rなどデータ増加時に再検証します。B=騎手適性＋並び、H=馬能力のみです。</p>`;
-  $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th>${bt.variants.map(v=>`<th>${esc(v.name)} 1位</th>`).join('')}</tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];if(!x)return '<td class="muted">--</td>';return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const roiCell=(v)=>{const st=bt.stats[v.key];if(!st.stake)return '<td>-</td>';const rate=st.returnYen/st.stake,cls=Math.abs(rate-bestRoi)<1e-12?' class="bestCell"':'';const profit=st.returnYen-st.stake;return `<td${cls}><b>${(rate*100).toFixed(1)}%</b><div class="muted">${st.roiN}R / 投資${st.stake.toLocaleString()}円 / 払戻${st.returnYen.toLocaleString()}円 / 収支${profit>=0?'+':''}${profit.toLocaleString()}円</div></td>`};
+  $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p>`;
+  $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th>${bt.variants.map(v=>`<th>${esc(v.name)} 1位</th>`).join('')}</tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];if(!x)return '<td class="muted">--</td>';return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}<div class="muted">単勝 ${x.odds??'-'}</div></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 function scoreClass(score){if(score==null)return '';return score>=60?'scoreGood':score>=45?'scoreMid':'scoreLow'}
@@ -899,7 +908,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.28 起動。55:45を追加しました。比率はまだ仮比較です。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.29 起動。確定単勝オッズの回収率を仮検証できます。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
