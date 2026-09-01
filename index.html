@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.31：高配当1位の要因を分解診断</p>
+<p>クリーン版 v4.32：並び補正の中身とデータ由来を分解</p>
 </header>
 <main>
 <div class="tabs">
@@ -530,37 +530,42 @@ function relativeSide(a,b){
 }
 function jockeyLineupPattern(row,meta,cardRows){
   const races=completeRacesBefore(meta?.date);
-  if(!row?.jockey||!races.length)return {adj:0,pairAdj:0,posAdj:0,pairMatches:0,pairOpponents:0,posN:0,label:'未学習',notes:[]};
+  if(!row?.jockey||!races.length)return {adj:0,pairAdj:0,posAdj:0,pairMatches:0,pairOpponents:0,posN:0,posLiveN:0,posRecoveredN:0,pairLiveMatches:0,pairRecoveredMatches:0,label:'未学習',notes:[]};
   const currentField=(cardRows||[]).length;
   const currentBand=gateBandByNumber(row.num,currentField);
   const selfAll=[];
   const selfBand=[];
+  let posLiveN=0,posRecoveredN=0;
   for(const race of races){
     const rr=(race.rows||[]).find(x=>x.jockey===row.jockey&&Number.isFinite(Number(x.rank)));
     if(!rr)continue;
     const field=(race.rows||[]).filter(x=>Number.isFinite(Number(x.rank))).length;
     const enriched={...rr,fieldSize:field};
     selfAll.push(enriched);
-    if(currentBand&&gateBandByNumber(rr.num,field)===currentBand)selfBand.push(enriched);
+    if(currentBand&&gateBandByNumber(rr.num,field)===currentBand){
+      selfBand.push(enriched);
+      if(race.recovered)posRecoveredN++;else posLiveN++;
+    }
   }
   let posAdj=0;
   if(selfAll.length>=5&&selfBand.length>=3){
     const allScore=scoreRows(selfAll),bandScore=scoreRows(selfBand);
     if(allScore&&bandScore)posAdj=clampValue((bandScore.score-allScore.score)*0.35,-4,4);
   }
-  let pairWeighted=0,pairWeight=0,pairMatches=0,pairOpponents=0;
+  let pairWeighted=0,pairWeight=0,pairMatches=0,pairOpponents=0,pairLiveMatches=0,pairRecoveredMatches=0;
   const notes=[];
   for(const opp of (cardRows||[])){
     if(!opp?.jockey||opp.jockey===row.jockey)continue;
     const targetSide=relativeSide(row.num,opp.num);
     if(!targetSide)continue;
-    let n=0,ahead=0;
+    let n=0,ahead=0,liveN=0,recoveredN=0;
     for(const race of races){
       const rows=(race.rows||[]).filter(x=>Number.isFinite(Number(x.rank)));
       const me=rows.find(x=>x.jockey===row.jockey),other=rows.find(x=>x.jockey===opp.jockey);
       if(!me||!other)continue;
       if(relativeSide(me.num,other.num)!==targetSide)continue;
       n++;
+      if(race.recovered)recoveredN++;else liveN++;
       if(Number(me.rank)<Number(other.rank))ahead++;
     }
     if(n<2)continue;
@@ -571,8 +576,10 @@ function jockeyLineupPattern(row,meta,cardRows){
     pairWeighted+=edge*w;
     pairWeight+=w;
     pairMatches+=n;
+    pairLiveMatches+=liveN;
+    pairRecoveredMatches+=recoveredN;
     pairOpponents++;
-    if(n>=3)notes.push(`${opp.jockey}に${targetSide} ${ahead}/${n}先着`);
+    if(n>=3)notes.push(`${opp.jockey}に${targetSide} ${ahead}/${n}先着（実${liveN}/復${recoveredN}）`);
   }
   const pairAdj=pairWeight?clampValue(pairWeighted/pairWeight,-6,6):0;
   const adj=clampValue(posAdj+pairAdj,-8,8);
@@ -581,7 +588,7 @@ function jockeyLineupPattern(row,meta,cardRows){
   if(pairMatches===0&&selfBand.length<3)label='未学習';
   else if(pairMatches<4&&selfBand.length<5)label='サンプル少';
   else if(pairMatches<10&&selfBand.length<10)label='参考';
-  return {adj,pairAdj,posAdj,pairMatches,pairOpponents,posN:selfBand.length,label,notes};
+  return {adj,pairAdj,posAdj,pairMatches,pairOpponents,posN:selfBand.length,posLiveN,posRecoveredN,pairLiveMatches,pairRecoveredMatches,label,notes};
 }
 function dayJockeyContext(jockey,date,raceNo,venue=''){
   const rn=Number(raceNo);
@@ -785,11 +792,12 @@ function runChronologicalBacktest(){
     const scored=cardRows.map(row=>{
       const h=horseAbility(row,meta);
       const q=jockeySuitability(row,meta);
-      let scoreA=null,scoreB=null,scoreC=null,scoreD=null,lineupAdj=0,dayAdj=0;
+      let scoreA=null,scoreB=null,scoreC=null,scoreD=null,lineupAdj=0,dayAdj=0,lineupDetail=null;
       if(q.score!=null){
         const lp=jockeyLineupPattern(row,meta,cardRows);
         const dp=jockeyDayRacePattern(row,meta);
         const base=Number(q.score);
+        lineupDetail=lp;
         lineupAdj=Number(lp.adj)||0;
         dayAdj=Number(dp.adj)||0;
         scoreA=base;
@@ -800,7 +808,7 @@ function runChronologicalBacktest(){
       const horse=Number.isFinite(Number(h.score))?Number(h.score):null;
       const jockey=Number.isFinite(Number(scoreB))?Number(scoreB):null;
       const blend=(hw)=>horse==null||jockey==null?null:clampValue(horse*hw+jockey*(1-hw),0,100);
-      return {row,scoreA,scoreB,scoreC,scoreD,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,
+      return {row,scoreA,scoreB,scoreC,scoreD,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,lineupDetail,
         scoreM50:blend(0.50),scoreM55:blend(0.55),scoreM60:blend(0.60),scoreM70:blend(0.70),scoreM80:blend(0.80)};
     });
     const actualTop3=new Set(resultRows.filter(x=>Number(x.rank)>=1&&Number(x.rank)<=3).map(x=>Number(x.num)));
@@ -815,6 +823,10 @@ function runChronologicalBacktest(){
           pop:Number.isFinite(Number(winner.pop))?Number(winner.pop):Number.isFinite(Number(winnerScored.row?.pop))?Number(winnerScored.row.pop):null,
           jockey:winnerScored.row?.jockey||winner.jockey||'',
           jockeyBase:winnerScored.jockeyBase,lineupAdj:winnerScored.lineupAdj,dayAdj:winnerScored.dayAdj,horseScore:winnerScored.horseScore,
+          posAdj:Number(winnerScored.lineupDetail?.posAdj)||0,pairAdj:Number(winnerScored.lineupDetail?.pairAdj)||0,
+          posN:Number(winnerScored.lineupDetail?.posN)||0,posLiveN:Number(winnerScored.lineupDetail?.posLiveN)||0,posRecoveredN:Number(winnerScored.lineupDetail?.posRecoveredN)||0,
+          pairMatches:Number(winnerScored.lineupDetail?.pairMatches)||0,pairOpponents:Number(winnerScored.lineupDetail?.pairOpponents)||0,
+          pairLiveMatches:Number(winnerScored.lineupDetail?.pairLiveMatches)||0,pairRecoveredMatches:Number(winnerScored.lineupDetail?.pairRecoveredMatches)||0,
           scoreB:winnerScored.scoreB,scoreD:winnerScored.scoreD,scoreM55:winnerScored.scoreM55,
           rankA,rankB,rankC,rankD,rankH,rankM55
         });
@@ -903,7 +915,7 @@ function renderBacktest(){
     if(x.rankM55===1)bits.push('55:45でも1位');
     return bits.join(' / ')||'複合要因';
   };
-  const highDiag=(bt.highPayoutDiagnostics||[]).length?`<h3>高配当1位の要因診断</h3><div class="tablewrap"><table><thead><tr><th>レース</th><th>勝ち馬</th><th>単勝</th><th>人気</th><th>騎手</th><th>A騎手適性</th><th>並び補正</th><th>B点 / 順位</th><th>当日R補正</th><th>D点 / 順位</th><th>H馬能力 / 順位</th><th>55:45 / 順位</th><th>なぜ拾えたか</th></tr></thead><tbody>${bt.highPayoutDiagnostics.map(x=>`<tr><td>${esc(x.date)} ${esc(x.venue)} ${x.raceNo}R</td><td><b>${x.num} ${esc(x.name)}</b></td><td><b>${x.odds.toFixed(1)}倍</b></td><td>${x.pop??'-'}</td><td>${esc(x.jockey)}</td><td>${scoreText(x.jockeyBase)} / ${rankText(x.rankA)}</td><td>${signed(x.lineupAdj)}</td><td>${scoreText(x.scoreB)} / ${rankText(x.rankB)}</td><td>${signed(x.dayAdj)}</td><td>${scoreText(x.scoreD)} / ${rankText(x.rankD)}</td><td>${scoreText(x.horseScore)} / ${rankText(x.rankH)}</td><td>${scoreText(x.scoreM55)} / ${rankText(x.rankM55)}</td><td class="btNote">${esc(highReason(x))}</td></tr>`).join('')}</tbody></table></div><p class="muted">10倍以上の勝ち馬のうち、B（騎手適性＋並び）またはD（B＋当日R）が1位評価できたレースだけを表示します。順位変化を見ることで、高配当を拾った主因が並び・当日R・元の騎手適性・馬能力のどこにあったか確認できます。</p>`:`<h3>高配当1位の要因診断</h3><p class="muted">10倍以上の勝ち馬をBまたはDで1位評価したレースはまだありません。</p>`;
+  const highDiag=(bt.highPayoutDiagnostics||[]).length?`<h3>高配当1位の要因診断</h3><div class="tablewrap"><table><thead><tr><th>レース</th><th>勝ち馬</th><th>単勝</th><th>人気</th><th>騎手</th><th>A騎手適性</th><th>並び合計</th><th>位置補正</th><th>相手比較補正</th><th>比較相手</th><th>過去比較</th><th>データ由来</th><th>B点 / 順位</th><th>当日R補正</th><th>D点 / 順位</th><th>H馬能力 / 順位</th><th>55:45 / 順位</th><th>なぜ拾えたか</th></tr></thead><tbody>${bt.highPayoutDiagnostics.map(x=>`<tr><td>${esc(x.date)} ${esc(x.venue)} ${x.raceNo}R</td><td><b>${x.num} ${esc(x.name)}</b></td><td><b>${x.odds.toFixed(1)}倍</b></td><td>${x.pop??'-'}</td><td>${esc(x.jockey)}</td><td>${scoreText(x.jockeyBase)} / ${rankText(x.rankA)}</td><td><b>${signed(x.lineupAdj)}</b></td><td>${signed(x.posAdj)}</td><td>${signed(x.pairAdj)}</td><td>${x.pairOpponents}人</td><td>${x.pairMatches}回</td><td class="btNote">位置 ${x.posN}鞍（実${x.posLiveN}/復${x.posRecoveredN}）<br>相手比較 ${x.pairMatches}回（実${x.pairLiveMatches}/復${x.pairRecoveredMatches}）</td><td>${scoreText(x.scoreB)} / ${rankText(x.rankB)}</td><td>${signed(x.dayAdj)}</td><td>${scoreText(x.scoreD)} / ${rankText(x.rankD)}</td><td>${scoreText(x.horseScore)} / ${rankText(x.rankH)}</td><td>${scoreText(x.scoreM55)} / ${rankText(x.rankM55)}</td><td class="btNote">${esc(highReason(x))}</td></tr>`).join('')}</tbody></table></div><p class="muted">並び合計は「位置補正＋相手比較補正」（最終的に±8点で制限）です。実=保存済みの実結果レース、復=過去馬柱から安全復元した並び学習データ。相手比較回数は、今回一緒に乗る騎手との過去の内外関係が一致した比較の合計です。重み自体は変更していません。</p>`:`<h3>高配当1位の要因診断</h3><p class="muted">10倍以上の勝ち馬をBまたはDで1位評価したレースはまだありません。</p>`;
   $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${highDiag}`;
   $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th>${bt.variants.map(v=>`<th>${esc(v.name)} 1位</th>`).join('')}</tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];if(!x)return '<td class="muted">--</td>';return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}<div class="muted">単勝 ${x.odds??'-'}</div></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
@@ -928,7 +940,8 @@ function renderPreview(p){
       const adjText=lp.label==='未学習'?'--':`${lp.adj>0?'+':''}${lp.adj.toFixed(1)}`;
       const dayAdjText=dp.label==='未学習'?'--':`${dp.adj>0?'+':''}${dp.adj.toFixed(1)} 参考`;
       const reason=q.reasons.length?q.reasons.join(' / '):`過去 ${q.total}鞍・条件一致なし`;
-      const lineupText=lp.notes.length?lp.notes.slice(0,3).join(' / '):`位置 ${lp.posN}鞍 / 相手比較 ${lp.pairMatches}回`;
+      const sourceLine=`位置 ${lp.posN}鞍（実${lp.posLiveN||0}/復${lp.posRecoveredN||0}） / 相手${lp.pairOpponents||0}人・比較${lp.pairMatches}回（実${lp.pairLiveMatches||0}/復${lp.pairRecoveredMatches||0}）`;
+      const lineupText=lp.notes.length?`${lp.notes.slice(0,3).join(' / ')} / ${sourceLine}`:sourceLine;
       const horseRuns=horseHistoryBefore(r.name,m.date).length;
       const horseText=hs.score==null?'--':Math.round(hs.score);
       const horseReason=hs.reasons?.length?hs.reasons.slice(0,3).join(' / '):'過去走なし';
@@ -962,7 +975,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.31 起動。高配当1位を拾った要因を順位変化まで分解できます。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.32 起動。並び補正を位置・相手比較・実結果/安全復元まで分解表示します。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
