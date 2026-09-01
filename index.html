@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.20：保存確認＋JSON自動バックアップ</p>
+<p>クリーン版 v4.21：取消・除外の結果誤読を修正</p>
 </header>
 <main>
 <div class="tabs">
@@ -167,8 +167,12 @@ function isSexAge(s){return /^(牡|牝|セ)\d+/.test(s)}
 function looksJockey(s){return s&&!/^\d/.test(s)&&!/(映像を見る|着差|タイム|人気|馬体重)/.test(s)}
 function parseResultRows(lines){
   const out=[];
-  for(let i=0;i<lines.length-7;i++){
+  const boundary=lines.findIndex(s=>/^(?:レース映像|払戻金|払戻し|コーナー通過順位)$/.test(String(s||'').trim()));
+  const limit=boundary>0?boundary:lines.length;
+  for(let i=0;i<limit-7;i++){
     if(!/^\d{1,2}$/.test(lines[i])) continue;
+    const prev=String(lines[i-1]||'').trim();
+    if(/^(?:取|取消|除|除外|中|中止|失|失格)$/.test(prev)) continue;
     const rank=Number(lines[i]);if(rank<1||rank>30) continue;
     let p=i+1;
     if(/^\d$/.test(lines[p])) p++;
@@ -178,7 +182,7 @@ function parseResultRows(lines){
     const burden=lines[p++],jockey=lines[p++];
     if(!/^\d{2,3}(?:\.\d)?$/.test(burden)||!looksJockey(jockey)) continue;
     let pop=null,odds=null,time='',timeIndex=-1;
-    const end=Math.min(lines.length,p+18);
+    const end=Math.min(limit,p+18);
     for(let j=p;j<end;j++){
       if(!time&&/^\d+:\d{2}(?:\.\d)?$/.test(lines[j])){time=lines[j];timeIndex=j}
       let m=lines[j].match(/^(\d+(?:\.\d+)?)\s*\((\d+)人気\)$/);
@@ -375,7 +379,7 @@ function mergeHorseRecords(a,b){
   return out;
 }
 function rebuildHorseHistory(extra=[]){
-  const existing=Array.isArray(state.horseHistory)?state.horseHistory:[];
+  const existing=(Array.isArray(state.horseHistory)?state.horseHistory:[]).filter(r=>r?.source!=='saved_result');
   const recovered=(state.seedHistory||[]).filter(r=>r?.name&&Number.isFinite(Number(r?.rank))).map(r=>({...r,source:r.source||'recovered_horse_card'}));
   const live=(state.races||[]).flatMap(r=>(r.rows||[]).map(x=>({...x,...(r.meta||{}),fieldSize:(r.rows||[]).length,source:'saved_result'})));
   const map=new Map();
