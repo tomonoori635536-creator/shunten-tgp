@@ -11,7 +11,7 @@
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.19：馬の成績も自動蓄積</p>
+<p>クリーン版 v4.20：保存確認＋JSON自動バックアップ</p>
 </header>
 <main>
 <div class="tabs">
@@ -26,7 +26,7 @@
 <div class="row"><label>データ収集年 <input id="year" type="number" min="2000" max="2100" value="2026" style="width:100px"></label><span class="muted">MM/DDだけのページの日付補完に使います</span></div>
 <textarea id="raw" placeholder="ここにページ全文を貼り付け"></textarea>
 <div class="row"><button class="btn primary" id="parseBtn">今すぐ読み取る</button><button class="btn primary" id="saveBtn" disabled>この結果を保存</button><button class="btn secondary" id="clearBtn">入力だけ消す</button></div>
-<div id="status" class="status">待機中</div><div id="preview"></div>
+<div id="status" class="status">待機中</div><div id="saveReceipt" class="status ok" style="display:none;font-size:18px;font-weight:800"></div><div id="preview"></div>
 </section>
 
 <section class="panel view" id="jockeyView">
@@ -39,8 +39,13 @@
 
 <section class="panel view" id="manageView">
 <h2>保存データ</h2>
+<div class="row"><button class="btn primary" id="autoBackupBtn">自動JSON保存を設定</button><span id="autoBackupState" class="muted">未設定</span></div>
+<p class="muted">最初に1回だけ保存先のJSONファイルを選びます。以後、出馬表・結果を保存するたびに同じファイルへ自動上書きします。</p>
 <div class="row"><button class="btn secondary" id="exportBtn">JSON書き出し</button><label class="btn secondary" style="display:inline-block">JSON読込<input type="file" id="importFile" accept="application/json,.json" style="display:none"></label><button class="btn secondary" id="deleteLastBtn">最後のレースを削除</button></div>
 <div id="manageStatus" class="status">保存データを確認できます。</div>
+<h3>保存済み出馬表</h3>
+<div class="tablewrap"><table><thead><tr><th>保存</th><th>日付</th><th>競馬場</th><th>R</th><th>レース名</th><th>頭数</th></tr></thead><tbody id="cardBody"></tbody></table></div>
+<h3>保存済み結果</h3>
 <div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>レース名</th><th>頭数</th></tr></thead><tbody id="raceBody"></tbody></table></div>
 </section>
 </main>
@@ -54,6 +59,51 @@ function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY)||'null');r
 function persist(){localStorage.setItem(KEY,JSON.stringify(state))}
 function rebuildHistory(){const live=(state.races||[]).flatMap(r=>(r.rows||[]).map(x=>({...x,...(r.meta||{})})));const seed=Array.isArray(state.seedHistory)?state.seedHistory:[];const seen=new Set();state.history=[...live,...seed].filter(r=>{const k=[r.date||'',r.venue||'',r.name||'',r.num??'',r.jockey||'',r.rank??''].join('|');if(seen.has(k))return false;seen.add(k);return true});persist()}
 const $=id=>document.getElementById(id);
+const AUTO_DB='shunten_auto_json_db';
+const AUTO_STORE='handles';
+const AUTO_HANDLE_KEY='backup';
+let autoJsonHandle=null;
+function openAutoDb(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(AUTO_DB,1);
+    req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(AUTO_STORE))req.result.createObjectStore(AUTO_STORE)};
+    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+}
+async function getStoredAutoHandle(){
+  try{const db=await openAutoDb();return await new Promise((resolve,reject)=>{const tx=db.transaction(AUTO_STORE,'readonly');const q=tx.objectStore(AUTO_STORE).get(AUTO_HANDLE_KEY);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error)})}catch(e){return null}
+}
+async function storeAutoHandle(h){
+  try{const db=await openAutoDb();await new Promise((resolve,reject)=>{const tx=db.transaction(AUTO_STORE,'readwrite');tx.objectStore(AUTO_STORE).put(h,AUTO_HANDLE_KEY);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}catch(e){}
+}
+function autoBackupUi(text,good=false){const el=$('autoBackupState');if(!el)return;el.textContent=text;el.className=good?'ok':'muted'}
+async function writeAutoJsonBackup(forcePermission=false){
+  if(!autoJsonHandle)return false;
+  try{
+    let perm=await autoJsonHandle.queryPermission({mode:'readwrite'});
+    if(perm!=='granted'&&forcePermission)perm=await autoJsonHandle.requestPermission({mode:'readwrite'});
+    if(perm!=='granted'){autoBackupUi('要再許可：自動JSON保存を設定を押してください');return false}
+    const writable=await autoJsonHandle.createWritable();
+    await writable.write(JSON.stringify(state,null,2));
+    await writable.close();
+    const now=new Date();
+    autoBackupUi(`自動保存ON ✓ ${now.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`,true);
+    return true;
+  }catch(e){autoBackupUi('自動保存エラー：設定し直してください');return false}
+}
+async function chooseAutoJsonBackup(){
+  if(!window.showSaveFilePicker){autoBackupUi('このブラウザは同一JSONへの自動保存に未対応');return}
+  try{
+    const h=await window.showSaveFilePicker({suggestedName:'shunten_auto_backup.json',types:[{description:'JSON',accept:{'application/json':['.json']}}]});
+    autoJsonHandle=h;await storeAutoHandle(h);await writeAutoJsonBackup(true);
+  }catch(e){if(e?.name!=='AbortError')autoBackupUi('設定できませんでした')}
+}
+async function initAutoJsonBackup(){
+  autoJsonHandle=await getStoredAutoHandle();
+  if(!autoJsonHandle){autoBackupUi('未設定');return}
+  try{const perm=await autoJsonHandle.queryPermission({mode:'readwrite'});autoBackupUi(perm==='granted'?'自動保存ON ✓':'保存先あり・再許可待ち',perm==='granted')}catch(e){autoBackupUi('未設定')}
+}
+function triggerAutoJsonBackup(){void writeAutoJsonBackup(false)}
 function cleanPasteToken(s){
   return String(s??'')
     .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1')
@@ -543,8 +593,8 @@ function renderPreview(p){
   $('preview').innerHTML=html;
 }
 function setStatus(msg,kind=''){$('status').className=`status ${kind}`;$('status').textContent=msg}
-function saveParsedResult(auto=false){if(!parsed||parsed.mode!=='result'||!parsed.rows.length)return false;const m=parsed.meta||{};if(!m.venue||!m.raceNo||!m.date)return false;const key=[m.date,m.venue,m.raceNo].join('|');const obj={meta:m,rows:parsed.rows,savedAt:new Date().toISOString()};const idx=(state.races||[]).findIndex(r=>[r.meta?.date,r.meta?.venue,r.meta?.raceNo].join('|')===key);if(idx>=0)state.races[idx]=obj;else state.races.push(obj);rebuildHistory();const horseTotal=rebuildHorseHistory();renderDashboard();setStatus(`✓ ${auto?'自動保存・騎手反映':'保存'}しました: ${m.date} ${m.venue} ${m.raceNo}R / ${parsed.rows.length}頭\n馬成績も ${parsed.rows.length}頭分反映 / 馬履歴 合計${horseTotal}走`,'ok');return true}
-function saveParsedCard(){if(!parsed||parsed.mode!=='card'||!parsed.rows.length)return false;const m=parsed.meta||{};if(!m.venue||!m.raceNo||!m.date)return false;if(!Array.isArray(state.raceCards))state.raceCards=[];const key=[m.date,m.venue,m.raceNo].join('|');const obj={meta:m,rows:parsed.rows,savedAt:new Date().toISOString()};const idx=state.raceCards.findIndex(r=>[r.meta?.date,r.meta?.venue,r.meta?.raceNo].join('|')===key);if(idx>=0)state.raceCards[idx]=obj;else state.raceCards.push(obj);const past=extractHorsePastRuns(parsed.lines||[],parsed.rows||[]);const before=(state.horseHistory||[]).length;const horseTotal=rebuildHorseHistory(past);const added=Math.max(0,horseTotal-before);renderDashboard();const names=[...new Set(parsed.rows.map(r=>r.jockey).filter(Boolean))];setStatus(`✓ 出馬表として読取・騎手登録: ${m.date} ${m.venue} ${m.raceNo}R / ${parsed.rows.length}頭 / ${names.length}名\n馬柱の過去走: 検出${past.length}走 / 新規${added}走 / 馬履歴 合計${horseTotal}走`,'ok');return true}
+function saveParsedResult(auto=false){if(!parsed||parsed.mode!=='result'||!parsed.rows.length)return false;const m=parsed.meta||{};if(!m.venue||!m.raceNo||!m.date)return false;const key=[m.date,m.venue,m.raceNo].join('|');const obj={meta:m,rows:parsed.rows,savedAt:new Date().toISOString()};const idx=(state.races||[]).findIndex(r=>[r.meta?.date,r.meta?.venue,r.meta?.raceNo].join('|')===key);if(idx>=0)state.races[idx]=obj;else state.races.push(obj);rebuildHistory();const horseTotal=rebuildHorseHistory();renderDashboard();setStatus(`✓ ${auto?'自動保存・騎手反映':'保存'}しました: ${m.date} ${m.venue} ${m.raceNo}R / ${parsed.rows.length}頭\n馬成績も ${parsed.rows.length}頭分反映 / 馬履歴 合計${horseTotal}走`,'ok');$('saveReceipt').style.display='block';$('saveReceipt').textContent=`✅ 結果 保存済み　${m.date} ${m.venue} ${m.raceNo}R`;triggerAutoJsonBackup();return true}
+function saveParsedCard(){if(!parsed||parsed.mode!=='card'||!parsed.rows.length)return false;const m=parsed.meta||{};if(!m.venue||!m.raceNo||!m.date)return false;if(!Array.isArray(state.raceCards))state.raceCards=[];const key=[m.date,m.venue,m.raceNo].join('|');const obj={meta:m,rows:parsed.rows,savedAt:new Date().toISOString()};const idx=state.raceCards.findIndex(r=>[r.meta?.date,r.meta?.venue,r.meta?.raceNo].join('|')===key);if(idx>=0)state.raceCards[idx]=obj;else state.raceCards.push(obj);const past=extractHorsePastRuns(parsed.lines||[],parsed.rows||[]);const before=(state.horseHistory||[]).length;const horseTotal=rebuildHorseHistory(past);const added=Math.max(0,horseTotal-before);renderDashboard();const names=[...new Set(parsed.rows.map(r=>r.jockey).filter(Boolean))];setStatus(`✓ 出馬表として読取・騎手登録: ${m.date} ${m.venue} ${m.raceNo}R / ${parsed.rows.length}頭 / ${names.length}名\n馬柱の過去走: 検出${past.length}走 / 新規${added}走 / 馬履歴 合計${horseTotal}走`,'ok');$('saveReceipt').style.display='block';$('saveReceipt').textContent=`✅ 出馬表 保存済み　${m.date} ${m.venue} ${m.raceNo}R`;triggerAutoJsonBackup();return true}
 $('parseBtn').addEventListener('click',()=>{parsed=parseAll($('raw').value);$('saveBtn').disabled=true;if(parsed.error){setStatus(parsed.error,'warn');$('preview').innerHTML='';return}renderPreview(parsed);const m=parsed.meta,okMeta=m.venue&&m.raceNo&&m.date,count=parsed.rows?.length||0;if(parsed.mode==='result'&&count>0){if(okMeta){saveParsedResult(true);$('saveBtn').disabled=false}else{setStatus(`✓ 結果として読取: ${m.date||'?'} ${m.venue||'?'} ${m.raceNo||'?'}R / ${count}頭\n日付・競馬場・Rのどれかが不明なため自動保存していません。`,'warn')}}else if(parsed.mode==='card'){if(okMeta){saveParsedCard()}else{setStatus(`✓ 出馬表として読取: ${m.date||'?'} ${m.venue||'?'} ${m.raceNo||'?'}R / ${count}頭\n日付・競馬場・Rのどれかが不明なため騎手登録していません。`,'warn')}}else{setStatus(`読取できませんでした。\n日付=${m.date||'?'} 競馬場=${m.venue||'?'} R=${m.raceNo||'?'} / 行数=${parsed.lines.length}\n結果候補=${parsed.debug?.result??0} / 馬柱候補=${parsed.debug?.past??0} / 通常出馬表候補=${parsed.debug?.card??0}`,'warn')}});
 $('saveBtn').addEventListener('click',()=>{saveParsedResult(false)});
 function pct(n,d){return d?`${(100*n/d).toFixed(1)}%`:'0.0%'}
@@ -555,14 +605,15 @@ function patternTable(title,entries,label){const rows=entries.sort((a,b)=>b[1].r
 function popularityExpectationCard(st){if(!st.popRides)return `<div class="patternCard"><h4>人気なり診断</h4><p class="muted">人気データのある結果がまだありません。</p></div>`;const atLeast=st.popBetter+st.popEqual;const diff=st.popDiffSum/st.popRides;const diffText=`${diff>0?'+':''}${diff.toFixed(2)}`;return `<div class="patternCard"><h4>人気なり診断</h4><p><b>対象 ${st.popRides}鞍</b></p><div class="tablewrap"><table><tr><th>判定</th><th>回数</th><th>率</th></tr><tr><td>人気より上の着順</td><td>${st.popBetter}</td><td>${pct(st.popBetter,st.popRides)}</td></tr><tr><td>人気どおり</td><td>${st.popEqual}</td><td>${pct(st.popEqual,st.popRides)}</td></tr><tr><td>人気より下の着順</td><td>${st.popWorse}</td><td>${pct(st.popWorse,st.popRides)}</td></tr><tr><td><b>人気以上</b></td><td><b>${atLeast}</b></td><td><b>${pct(atLeast,st.popRides)}</b></td></tr></table></div><p class="muted">平均人気差 ${diffText}。プラスほど、人気順位より上の着順へ持ってきています。</p></div>`}
 function bestPattern(st){const all=[];for(const [type,obj] of [['競馬場',st.venues],['コース',st.courses],['馬場',st.goings],['人気帯',st.pops]])for(const [key,x] of Object.entries(obj))if(x.rides>=3)all.push({type,key,...x,score:(x.wins*2+x.places)/x.rides});return all.sort((a,b)=>b.score-a.score||b.rides-a.rides)[0]||null}
 function renderJockeyDetail(name){const st=jockeyStats().find(x=>x.name===name);if(!st){$('jockeyDetail').textContent='騎手を選択してください。';return}const best=bestPattern(st);const popOrder=['1人気','2-3人気','4-6人気','7人気以下'];const popEntries=popOrder.filter(k=>st.pops[k]).map(k=>[k,st.pops[k]]);const exactPopEntries=Object.entries(st.popExact).sort((a,b)=>Number(a[0].replace('人気',''))-Number(b[0].replace('人気','')));$('jockeyDetail').innerHTML=`<h3>${esc(st.name)} ${best?`<span class="badge">得意候補 ${esc(best.type)}: ${esc(best.key)}</span>`:''}</h3><p><b>${st.rides}鞍</b> / 1着 ${st.wins}（${pct(st.wins,st.rides)}） / 3着内 ${st.places}（${pct(st.places,st.rides)}） / 平均着順 ${avgRankText(st)}</p><div class="patternGrid">${patternTable('競馬場別',Object.entries(st.venues),'競馬場')}${patternTable('コース・距離別',Object.entries(st.courses),'コース')}${patternTable('馬場別',Object.entries(st.goings),'馬場')}${patternTable('人気帯別',popEntries,'人気帯')}${patternTable('人気順位別',exactPopEntries,'人気')}${popularityExpectationCard(st)}</div>`}
-function renderDashboard(){state=loadState();if(!Array.isArray(state.races))state.races=[];if(!Array.isArray(state.history))rebuildHistory();if(!Array.isArray(state.raceCards))state.raceCards=[];rebuildHorseHistory();const stats=jockeyStats();$('raceCount').textContent=state.races.length;$('rideCount').textContent=(state.history||[]).length;$('jockeyCount').textContent=stats.length;$('jockeyBody').innerHTML=stats.length?stats.map(x=>`<tr class="clickrow" data-jockey="${esc(x.name)}"><td><b>${esc(x.name)}</b></td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${avgRankText(x)}</td></tr>`).join(''):'<tr><td colspan="7">まだ登録された騎手がありません。</td></tr>';document.querySelectorAll('[data-jockey]').forEach(tr=>tr.addEventListener('click',()=>renderJockeyDetail(tr.dataset.jockey)));$('raceBody').innerHTML=state.races.length?[...state.races].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="5">保存レースはありません。</td></tr>';const horseCount=new Set((state.horseHistory||[]).map(r=>r.name).filter(Boolean)).size;$('manageStatus').textContent=`保存レース: ${state.races.length} / 学習騎乗: ${(state.history||[]).length}（復元 ${(state.seedHistory||[]).length}） / 馬成績: ${(state.horseHistory||[]).length}走・${horseCount}頭 / 出馬表: ${state.raceCards.length}`}
+function renderDashboard(){state=loadState();if(!Array.isArray(state.races))state.races=[];if(!Array.isArray(state.history))rebuildHistory();if(!Array.isArray(state.raceCards))state.raceCards=[];rebuildHorseHistory();const stats=jockeyStats();$('raceCount').textContent=state.races.length;$('rideCount').textContent=(state.history||[]).length;$('jockeyCount').textContent=stats.length;$('jockeyBody').innerHTML=stats.length?stats.map(x=>`<tr class="clickrow" data-jockey="${esc(x.name)}"><td><b>${esc(x.name)}</b></td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${avgRankText(x)}</td></tr>`).join(''):'<tr><td colspan="7">まだ登録された騎手がありません。</td></tr>';document.querySelectorAll('[data-jockey]').forEach(tr=>tr.addEventListener('click',()=>renderJockeyDetail(tr.dataset.jockey)));$('cardBody').innerHTML=state.raceCards.length?[...state.raceCards].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>✅</td><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="6">保存済み出馬表はありません。</td></tr>';$('raceBody').innerHTML=state.races.length?[...state.races].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="5">保存レースはありません。</td></tr>';const horseCount=new Set((state.horseHistory||[]).map(r=>r.name).filter(Boolean)).size;$('manageStatus').textContent=`保存レース: ${state.races.length} / 学習騎乗: ${(state.history||[]).length}（復元 ${(state.seedHistory||[]).length}） / 馬成績: ${(state.horseHistory||[]).length}走・${horseCount}頭 / 出馬表: ${state.raceCards.length}`}
 function downloadJSON(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`shunten_backup_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href)}
+$('autoBackupBtn').addEventListener('click',chooseAutoJsonBackup);
 $('exportBtn').addEventListener('click',downloadJSON);
-$('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x||typeof x!=='object')throw new Error();state=Object.assign(emptyState(),x);rebuildHistory();renderDashboard();$('manageStatus').textContent='✓ JSONを読み込みました。'}catch(err){$('manageStatus').textContent='JSONを読み込めませんでした。'}e.target.value=''});
-$('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('manageStatus').textContent='削除するレースがありません。';return}const r=state.races.pop();rebuildHistory();renderDashboard();$('manageStatus').textContent=`最後のレースを削除しました: ${r.meta?.date||''} ${r.meta?.venue||''} ${r.meta?.raceNo??''}R`});
+$('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x||typeof x!=='object')throw new Error();state=Object.assign(emptyState(),x);rebuildHistory();renderDashboard();triggerAutoJsonBackup();$('manageStatus').textContent='✓ JSONを読み込みました。'}catch(err){$('manageStatus').textContent='JSONを読み込めませんでした。'}e.target.value=''});
+$('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('manageStatus').textContent='削除するレースがありません。';return}const r=state.races.pop();rebuildHistory();renderDashboard();triggerAutoJsonBackup();$('manageStatus').textContent=`最後のレースを削除しました: ${r.meta?.date||''} ${r.meta?.venue||''} ${r.meta?.raceNo??''}R`});
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view!=='inputView')renderDashboard()}));
-$('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.14 起動。通常出馬表と馬柱(5走/9走)の両方に対応しました。','ok');renderDashboard()})();
+$('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.20 起動。保存確認とJSON自動バックアップに対応しました。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
