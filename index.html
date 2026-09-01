@@ -5,18 +5,19 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>鞍上パターン帳 × 瞬天 TGP ENGINE</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f7f9;color:#18212b}header{background:#101820;color:#fff;padding:18px 20px}header h1{margin:0;font-size:24px}header p{margin:6px 0 0;color:#b8c5d1}main{max-width:1180px;margin:20px auto;padding:0 14px}.panel{background:#fff;border:1px solid #dde3e8;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.04)}textarea{width:100%;min-height:340px;padding:12px;border:1px solid #cbd3da;border-radius:8px;resize:vertical;font:14px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:700}.primary{background:#101820;color:#fff}.secondary{background:#e9eef2;color:#17202a}.status{margin-top:12px;padding:12px;border-radius:8px;background:#eef3f7;white-space:pre-wrap}.ok{color:#137944}.warn{color:#a05c00}.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}.chip{border:1px solid #dbe1e6;border-radius:8px;padding:10px;background:#fafbfc}.tablewrap{overflow:auto;max-height:520px;margin-top:12px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;border-bottom:1px solid #e7ebee;text-align:left;white-space:nowrap}th{background:#f7f9fa;position:sticky;top:0}.muted{color:#66727d;font-size:13px}input,select{padding:8px;border:1px solid #cbd3da;border-radius:7px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.tab{background:#e9eef2;color:#17202a}.tab.active{background:#101820;color:#fff}.view{display:none}.view.active{display:block}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}.big{font-size:24px;font-weight:800}.clickrow{cursor:pointer}.clickrow:hover{background:#f2f6f8}.detailbox{margin-top:14px;padding:14px;background:#f7f9fa;border-radius:10px;border:1px solid #e0e5e9}.patternGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}.patternCard{background:#fff;border:1px solid #dfe5ea;border-radius:10px;padding:12px}.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#e8eef3;font-size:12px;margin-left:6px}.strong{font-weight:800;color:#0d6b3f}.scoreCell{font-size:18px;font-weight:800}.scoreGood{color:#0d6b3f}.scoreMid{color:#7a5a00}.scoreLow{color:#8a3333}.scoreNote{font-size:12px;color:#66727d;white-space:normal;min-width:170px}.scoreFlag{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef3f7;font-size:12px;font-weight:700}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f7f9;color:#18212b}header{background:#101820;color:#fff;padding:18px 20px}header h1{margin:0;font-size:24px}header p{margin:6px 0 0;color:#b8c5d1}main{max-width:1180px;margin:20px auto;padding:0 14px}.panel{background:#fff;border:1px solid #dde3e8;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.04)}textarea{width:100%;min-height:340px;padding:12px;border:1px solid #cbd3da;border-radius:8px;resize:vertical;font:14px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:700}.primary{background:#101820;color:#fff}.secondary{background:#e9eef2;color:#17202a}.status{margin-top:12px;padding:12px;border-radius:8px;background:#eef3f7;white-space:pre-wrap}.ok{color:#137944}.warn{color:#a05c00}.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}.chip{border:1px solid #dbe1e6;border-radius:8px;padding:10px;background:#fafbfc}.tablewrap{overflow:auto;max-height:520px;margin-top:12px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;border-bottom:1px solid #e7ebee;text-align:left;white-space:nowrap}th{background:#f7f9fa;position:sticky;top:0}.muted{color:#66727d;font-size:13px}input,select{padding:8px;border:1px solid #cbd3da;border-radius:7px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.tab{background:#e9eef2;color:#17202a}.tab.active{background:#101820;color:#fff}.view{display:none}.view.active{display:block}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}.big{font-size:24px;font-weight:800}.clickrow{cursor:pointer}.clickrow:hover{background:#f2f6f8}.detailbox{margin-top:14px;padding:14px;background:#f7f9fa;border-radius:10px;border:1px solid #e0e5e9}.patternGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}.patternCard{background:#fff;border:1px solid #dfe5ea;border-radius:10px;padding:12px}.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#e8eef3;font-size:12px;margin-left:6px}.strong{font-weight:800;color:#0d6b3f}.scoreCell{font-size:18px;font-weight:800}.scoreGood{color:#0d6b3f}.scoreMid{color:#7a5a00}.scoreLow{color:#8a3333}.scoreNote{font-size:12px;color:#66727d;white-space:normal;min-width:170px}.scoreFlag{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef3f7;font-size:12px;font-weight:700}.bestCell{background:#edf8f1;font-weight:800}.hit{color:#0d6b3f;font-weight:800}.miss{color:#8a3333}.btNote{white-space:normal;min-width:180px}
 </style>
 </head>
 <body>
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.23：騎手の当日成績×Rパターン学習</p>
+<p>クリーン版 v4.24：51レース時系列バックテスト</p>
 </header>
 <main>
 <div class="tabs">
 <button class="btn tab active" data-view="inputView">データ入力</button>
 <button class="btn tab" data-view="jockeyView">騎手一覧</button>
+<button class="btn tab" data-view="backtestView">バックテスト</button>
 <button class="btn tab" data-view="manageView">保存データ</button>
 </div>
 
@@ -35,6 +36,17 @@
 <p class="muted">騎手名をクリックすると、競馬場・コース距離・馬場・人気別のパターンを確認できます。</p>
 <div class="tablewrap"><table><thead><tr><th>騎手</th><th>騎乗</th><th>1着</th><th>勝率</th><th>3着内</th><th>複勝率</th><th>平均着順</th></tr></thead><tbody id="jockeyBody"></tbody></table></div>
 <div id="jockeyDetail" class="detailbox">騎手を選択してください。</div>
+</section>
+
+<section class="panel view" id="backtestView">
+<h2>時系列バックテスト</h2>
+<p>保存済みの「出馬表→結果」を使って、対象レースより後の結果を見ない真の時系列で4方式を比較します。取消・除外など結果に存在しない馬は評価対象から外します。</p>
+<div class="row"><button class="btn primary" id="backtestBtn">バックテスト再計算</button><span class="muted">A=騎手適性 / B=＋並び / C=＋当日R / D=＋並び＋当日R</span></div>
+<div class="summary" style="margin-top:14px"><div class="chip"><b>保存結果</b><div class="big" id="btResultCount">0</div></div><div class="chip"><b>保存出馬表</b><div class="big" id="btCardCount">0</div></div><div class="chip"><b>評価対象</b><div class="big" id="btEvalCount">0</div></div><div class="chip"><b>除外</b><div class="big" id="btSkipCount">0</div></div></div>
+<div id="backtestStatus" class="status">バックテストタブを開くと計算します。</div>
+<div id="backtestSummary"></div>
+<h3>レース別</h3>
+<div id="backtestDetail"></div>
 </section>
 
 <section class="panel view" id="manageView">
@@ -646,6 +658,93 @@ function dailyPatternEntries(name){
   }
   return [...map.entries()].sort((a,b)=>a[1].raceNo-b[1].raceNo||a[1].preWins-b[1].preWins||a[1].prePlaces-b[1].prePlaces);
 }
+function backtestKey(meta){return [meta?.date||'',meta?.venue||'',Number(meta?.raceNo)||''].join('|')}
+function backtestPct(n,d){return d?`${(100*n/d).toFixed(1)}%`:'0.0%'}
+function backtestRankRows(scored,key){
+  return scored.filter(x=>Number.isFinite(Number(x[key]))).sort((a,b)=>Number(b[key])-Number(a[key])||Number(a.row?.num||99)-Number(b.row?.num||99));
+}
+function backtestRacePairs(){
+  const cards=new Map();
+  for(const c of (state.raceCards||[]))cards.set(backtestKey(c.meta),c);
+  return [...(state.races||[])].sort((a,b)=>dateNumber(a.meta?.date)-dateNumber(b.meta?.date)||Number(a.meta?.raceNo||0)-Number(b.meta?.raceNo||0)).map(result=>({result,card:cards.get(backtestKey(result.meta))||null}));
+}
+function runChronologicalBacktest(){
+  state=loadState();
+  if(!Array.isArray(state.races))state.races=[];
+  if(!Array.isArray(state.raceCards))state.raceCards=[];
+  if(!Array.isArray(state.history))rebuildHistory();
+  rebuildHorseHistory();
+  const variants=[
+    {key:'a',name:'A 騎手適性のみ',score:'scoreA'},
+    {key:'b',name:'B ＋並び',score:'scoreB'},
+    {key:'c',name:'C ＋当日R',score:'scoreC'},
+    {key:'d',name:'D ＋並び＋当日R',score:'scoreD'}
+  ];
+  const stats=Object.fromEntries(variants.map(v=>[v.key,{name:v.name,n:0,top1Win:0,top1Place:0,winnerTop3:0,exactTop3:0}]));
+  const details=[];
+  let skipped=0;
+  for(const pair of backtestRacePairs()){
+    const result=pair.result,card=pair.card;
+    if(!card){skipped++;continue}
+    const resultRows=(result.rows||[]).filter(x=>Number.isFinite(Number(x.rank)));
+    const resultByNum=new Map(resultRows.map(x=>[Number(x.num),x]));
+    const winner=resultRows.find(x=>Number(x.rank)===1);
+    if(!winner){skipped++;continue}
+    const cardRows=(card.rows||[]).filter(x=>resultByNum.has(Number(x.num)));
+    if(cardRows.length<3){skipped++;continue}
+    const meta={...(card.meta||{}),date:result.meta?.date||card.meta?.date,venue:result.meta?.venue||card.meta?.venue,raceNo:result.meta?.raceNo||card.meta?.raceNo};
+    const scored=cardRows.map(row=>{
+      const q=jockeySuitability(row,meta);
+      if(q.score==null)return {row,scoreA:null,scoreB:null,scoreC:null,scoreD:null};
+      const lp=jockeyLineupPattern(row,meta,cardRows);
+      const dp=jockeyDayRacePattern(row,meta);
+      const base=Number(q.score);
+      return {row,scoreA:base,scoreB:clampValue(base+lp.adj,0,100),scoreC:clampValue(base+dp.adj,0,100),scoreD:clampValue(base+lp.adj+dp.adj,0,100)};
+    });
+    const rankings={};
+    let usable=true;
+    for(const v of variants){
+      const ranked=backtestRankRows(scored,v.score);
+      if(ranked.length<3){usable=false;break}
+      rankings[v.key]=ranked;
+    }
+    if(!usable){skipped++;continue}
+    const actualTop3=new Set(resultRows.filter(x=>Number(x.rank)>=1&&Number(x.rank)<=3).map(x=>Number(x.num)));
+    const rowDetail={date:meta.date||'',venue:meta.venue||'',raceNo:meta.raceNo||'',winnerNum:Number(winner.num),winnerName:winner.name||'',tops:{}};
+    for(const v of variants){
+      const ranked=rankings[v.key],st=stats[v.key],top1=ranked[0],top3=ranked.slice(0,3);
+      const top1Result=resultByNum.get(Number(top1.row.num));
+      st.n++;
+      if(Number(top1Result?.rank)===1)st.top1Win++;
+      if(Number(top1Result?.rank)<=3)st.top1Place++;
+      if(top3.some(x=>Number(x.row.num)===Number(winner.num)))st.winnerTop3++;
+      const predTop3=new Set(top3.map(x=>Number(x.row.num)));
+      if(actualTop3.size===3&&[...actualTop3].every(n=>predTop3.has(n)))st.exactTop3++;
+      rowDetail.tops[v.key]={num:Number(top1.row.num),name:top1.row.name||'',hit:Number(top1Result?.rank)===1,place:Number(top1Result?.rank)<=3};
+    }
+    details.push(rowDetail);
+  }
+  return {variants,stats,details,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
+}
+function renderBacktest(){
+  const bt=runChronologicalBacktest();
+  $('btResultCount').textContent=bt.totalResults;
+  $('btCardCount').textContent=bt.totalCards;
+  $('btEvalCount').textContent=bt.details.length;
+  $('btSkipCount').textContent=bt.skipped;
+  if(!bt.details.length){
+    $('backtestStatus').textContent='評価できる「出馬表→結果」の組がまだありません。日付・競馬場・Rが一致した保存データが必要です。';
+    $('backtestSummary').innerHTML='';$('backtestDetail').innerHTML='';return;
+  }
+  $('backtestStatus').textContent=`✓ ${bt.details.length}レースを時系列評価しました。後の開催日・同日後続Rは予測に使っていません。除外 ${bt.skipped}レース。`;
+  const metrics=['top1Win','top1Place','winnerTop3','exactTop3'];
+  const best={};
+  for(const m of metrics)best[m]=Math.max(...bt.variants.map(v=>bt.stats[v.key][m]/Math.max(1,bt.stats[v.key].n)));
+  const cell=(v,m)=>{const st=bt.stats[v.key],rate=st[m]/Math.max(1,st.n),cls=Math.abs(rate-best[m])<1e-12?' class="bestCell"':'';return `<td${cls}>${backtestPct(st[m],st.n)} <span class="muted">(${st[m]}/${st.n})</span></td>`};
+  $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}</tr>`}).join('')}</tbody></table></div><p class="muted">緑のセルはその指標の最高値です。まずは「補正を足したことで改善したか」をAと比較してください。</p>`;
+  $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th><th>A 1位</th><th>B 1位</th><th>C 1位</th><th>D 1位</th></tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
 function scoreClass(score){if(score==null)return '';return score>=60?'scoreGood':score>=45?'scoreMid':'scoreLow'}
 function renderPreview(p){
   const m=p.meta||{},modeLabel=p.mode==='result'?'結果ページ':p.mode==='card'?'出馬表':'未判定';
@@ -693,7 +792,8 @@ $('autoBackupBtn').addEventListener('click',chooseAutoJsonBackup);
 $('exportBtn').addEventListener('click',downloadJSON);
 $('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x||typeof x!=='object')throw new Error();state=Object.assign(emptyState(),x);rebuildHistory();renderDashboard();triggerAutoJsonBackup();$('manageStatus').textContent='✓ JSONを読み込みました。'}catch(err){$('manageStatus').textContent='JSONを読み込めませんでした。'}e.target.value=''});
 $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('manageStatus').textContent='削除するレースがありません。';return}const r=state.races.pop();rebuildHistory();renderDashboard();triggerAutoJsonBackup();$('manageStatus').textContent=`最後のレースを削除しました: ${r.meta?.date||''} ${r.meta?.venue||''} ${r.meta?.raceNo??''}R`});
-document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view!=='inputView')renderDashboard()}));
+document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
+$('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
 (function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.23 起動。当日ここまでの勝数・3着内数 × Rを騎手別に学習します。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
