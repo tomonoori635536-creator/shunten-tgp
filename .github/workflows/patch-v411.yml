@@ -1,0 +1,109 @@
+name: patch-v411
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v411.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch card parser
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          start=s.index('function parseRaceCard(lines){')
+          end=s.index('\nfunction dedupe(arr,keyFn)',start)
+          new=r'''function parseRaceCard(lines){
+            const out=[];
+            const start=Math.max(0,lines.findIndex(x=>/発走/.test(x)));
+            const tokens=[];
+            for(let i=start;i<lines.length;i++){
+              const s=String(lines[i]||'').trim();
+              if(!s)continue;
+              for(const part of s.split(/\s+/)){
+                const t=String(part||'').trim();
+                if(t)tokens.push(t);
+              }
+            }
+            const noise=v=>isCardNoise(v)||/^(?:Image|お気に入り馬|マスター|レース別馬メモ|閉じる|削除|保存)$/.test(v);
+            for(let sexIdx=0;sexIdx<tokens.length;sexIdx++){
+              if(!isSexAge(tokens[sexIdx]))continue;
+              let burdenIdx=-1;
+              for(let j=sexIdx+1;j<Math.min(tokens.length,sexIdx+4);j++){
+                if(/^\d{2,3}(?:\.\d)?$/.test(tokens[j])){burdenIdx=j;break}
+              }
+              if(burdenIdx<0)continue;
+              let jockey='',jockeyIdx=-1;
+              for(let j=burdenIdx+1;j<Math.min(tokens.length,burdenIdx+4);j++){
+                const v=tokens[j];
+                if(!noise(v)&&looksJockey(v)&&!/^愛知$/.test(v)){jockey=v;jockeyIdx=j;break}
+              }
+              if(!jockey)continue;
+              let name='',nameIdx=-1;
+              for(let j=sexIdx-1;j>=Math.max(0,sexIdx-7);j--){
+                const v=tokens[j];
+                if(noise(v)||/^\d+(?:\.\d+)?$/.test(v)||/^\d+\(.+\)$/.test(v)||/^(?:愛知|取消|除外|中止)$/.test(v))continue;
+                if(/^(?:枠|馬|番|印|馬名|性齢|斤量|騎手|厩舎|馬体重|オッズ|人気)$/.test(v))continue;
+                name=v.replace(/Image$/,'').trim();nameIdx=j;break;
+              }
+              if(!name||nameIdx<0)continue;
+              const nums=[];
+              for(let j=nameIdx-1;j>=Math.max(0,nameIdx-6);j--){
+                const v=tokens[j];
+                if(noise(v))continue;
+                if(/^\d{1,2}$/.test(v)){
+                  const n=Number(v);
+                  if(n>=1&&n<=20)nums.push(n);
+                  if(nums.length>=2)break;
+                }
+              }
+              if(!nums.length)continue;
+              const num=nums[0],frame=nums.length>1?nums[1]:null;
+              let pop=null,odds=null;
+              let nextSex=tokens.length;
+              for(let j=sexIdx+1;j<tokens.length;j++)if(isSexAge(tokens[j])){nextSex=j;break}
+              for(let j=jockeyIdx+1;j<Math.min(nextSex,jockeyIdx+14);j++){
+                const cur=tokens[j],next=tokens[j+1]||'';
+                let m=cur.match(/^(\d+(?:\.\d+)?)\((\d+)人気\)$/);
+                if(m){odds=Number(m[1]);pop=Number(m[2]);break}
+                m=cur.match(/^(\d+)人気$/);
+                if(m){pop=Number(m[1]);continue}
+                if(/^\d+(?:\.\d+)?$/.test(cur)&&/^\d{1,2}$/.test(next)){
+                  const o=Number(cur),candidate=Number(next);
+                  if(o>=1&&candidate>=1&&candidate<=20){odds=o;pop=candidate;break}
+                }
+              }
+              out.push({frame,num,name,jockey,pop,odds,rank:null,sexAge:tokens[sexIdx]});
+            }
+            return dedupe(out,r=>`${r.num}|${r.name}`);
+          }'''
+          s=s[:start]+new+s[end:]
+          s=s.replace('クリーン版 v4.10：出馬表の性齢アンカー読取','クリーン版 v4.11：空白区切り出馬表に対応')
+          s=s.replace('✓ クリーン版 v4.10 起動。出馬表を性齢アンカー方式で読み取ります。','✓ クリーン版 v4.11 起動。空白区切りの出馬表にも対応しました。')
+          p.write_text(s,encoding='utf-8')
+      - name: Syntax check
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          m=re.search(r'<script>(.*)</script>',s,re.S)
+          Path('/tmp/index.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/index.js
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'fix: parse space-separated race card rows'
+          git push
