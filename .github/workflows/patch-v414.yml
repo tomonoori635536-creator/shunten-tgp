@@ -1,0 +1,121 @@
+name: patch-v414
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v414.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch horse-column parser
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          helper=r'''function resolveCardJockey(name){
+            const base=String(name||'').replace(/^[▲△◇☆★]+/,'').trim();
+            const aliases={
+              '大畑雅':'大畑雅章','加藤誓':'加藤誓二','丹羽克':'丹羽克輝','大原浩':'大原浩司',
+              '近藤颯':'近藤颯羽','丸野勝':'丸野勝虎','細川智':'細川智史','塚本征':'塚本征吾',
+              '木之前':'木之前葵','木之葵':'木之前葵','今井貴':'今井貴大','大畑慧':'大畑慧悟'
+            };
+            const names=[...new Set((state.history||[]).map(r=>String(r.jockey||'').replace(/^[▲△◇☆★]+/,'').trim()).filter(Boolean))];
+            if(names.includes(base))return base;
+            const hits=names.filter(n=>n.startsWith(base)||base.startsWith(n));
+            if(hits.length===1)return hits[0];
+            return aliases[base]||base;
+          }
+          function parsePastCard(lines){
+            const out=[];
+            const trainerRe=/^(?:愛知|兵庫|北海道|高知|佐賀|笠松|岩手|船橋|浦和|川崎|大井|金沢|名古屋|園田)[・･]/;
+            const noiseRe=/^(?:--|\[Select\]|Select|印|Image|映像を見る|登録|グループ|編集|馬メモ|切替)$/;
+            for(let i=0;i<lines.length;i++){
+              const line=String(lines[i]||'').trim();
+              const om=line.match(/(?:^|\s)(\d+(?:\.\d+)?)\s*\((\d{1,2})人気\)(?:\s|$)/);
+              if(!om)continue;
+              const odds=Number(om[1]),pop=Number(om[2]);
+              let sexIdx=-1,sexAge='',jockey='';
+              for(let j=i+1;j<Math.min(lines.length,i+6);j++){
+                const v=String(lines[j]||'').replace(/^\|\s*/,'').trim();
+                const sm=v.match(/^((?:牡|牝|セ)\d+\S*)\s+(.+)$/);
+                if(sm){sexIdx=j;sexAge=sm[1];jockey=sm[2].trim();break}
+                if(/^(?:牡|牝|セ)\d+\S*$/.test(v)){
+                  for(let k=j+1;k<Math.min(lines.length,j+3);k++){
+                    const n=String(lines[k]||'').trim();
+                    if(n&&!/^\d{2,3}(?:\.\d)?$/.test(n)){sexIdx=j;sexAge=v;jockey=n;break}
+                  }
+                  if(jockey)break;
+                }
+              }
+              if(!jockey)continue;
+              let trainerIdx=-1;
+              for(let j=i-1;j>=Math.max(0,i-10);j--){
+                const v=String(lines[j]||'').trim();
+                if(trainerRe.test(v)){trainerIdx=j;break}
+              }
+              if(trainerIdx<0)continue;
+              const cand=[];
+              for(let j=Math.max(0,trainerIdx-7);j<trainerIdx;j++){
+                let v=String(lines[j]||'').replace(/\s+Image(?:\s+Image)?$/,'').trim();
+                if(!v||noiseRe.test(v)||/^\(.+\)$/.test(v)||/^\d+(?:\.\d+)?$/.test(v))continue;
+                if(/^\d{1,2}\s+\d{1,2}(?:\s+\[Select\])?$/.test(v))continue;
+                cand.push(v);
+              }
+              if(cand.length<2)continue;
+              const horseName=cand.length>=3?cand[cand.length-2]:cand[0];
+              let frame=null,num=null;
+              for(let j=trainerIdx-1;j>=Math.max(0,trainerIdx-12);j--){
+                const v=String(lines[j]||'').trim();
+                let rm=v.match(/^([1-8])\s+([1-9]|1\d|2\d)(?:\s+(?:\[Select\]|--))?$/);
+                if(rm){frame=Number(rm[1]);num=Number(rm[2]);break}
+                if(/^([1-9]|1\d|2\d)$/.test(v)){
+                  const n=Number(v),prev=String(lines[j-1]||'').trim();
+                  if(/^[1-8]$/.test(prev)){frame=Number(prev);num=n;break}
+                }
+              }
+              if(!num)num=out.length+1;
+              jockey=resolveCardJockey(jockey.replace(/[▲△◇]/g,'').trim());
+              out.push({frame,num,name:horseName,jockey,pop,odds,rank:null,sexAge});
+            }
+            return dedupe(out,r=>`${r.num}|${r.name}`);
+          }
+          '''
+          if 'function parsePastCard(lines)' not in s:
+            pos=s.index('function parseRaceCard(lines){')
+            s=s[:pos]+helper+s[pos:]
+          start=s.index('function parseAll(raw){')
+          end=s.index('\nfunction dateNumber',start)
+          new_parse="function parseAll(raw){const lines=linesOf(raw);if(!lines.length)return {error:'入力が空です'};const meta=parseMeta(lines),resultRows=parseResultRows(lines);if(resultRows.length>=3)return {meta,mode:'result',rows:resultRows,lines,debug:{result:resultRows.length,past:0,card:0}};const pastRows=parsePastCard(lines);if(pastRows.length>=3)return {meta,mode:'card',rows:pastRows,lines,debug:{result:resultRows.length,past:pastRows.length,card:0}};const cardRows=parseRaceCard(lines);const mode=cardRows.length?'card':'unknown';return {meta,mode,rows:cardRows,lines,debug:{result:resultRows.length,past:pastRows.length,card:cardRows.length}};}"
+          s=s[:start]+new_parse+s[end:]
+          s=re.sub(r'クリーン版 v4\.\d+：[^<]*','クリーン版 v4.14：馬柱(5走/9走)の出馬表に対応',s,count=1)
+          s=re.sub(r"setStatus\('✓ クリーン版 v4\.[^']*','ok'\)","setStatus('✓ クリーン版 v4.14 起動。通常出馬表と馬柱(5走/9走)の両方に対応しました。','ok')",s)
+          old="setStatus(`読取できませんでした。\\n日付=${m.date||'?'} 競馬場=${m.venue||'?'} R=${m.raceNo||'?'} / 行数=${parsed.lines.length}`,'warn')"
+          new="setStatus(`読取できませんでした。\\n日付=${m.date||'?'} 競馬場=${m.venue||'?'} R=${m.raceNo||'?'} / 行数=${parsed.lines.length}\\n結果候補=${parsed.debug?.result??0} / 馬柱候補=${parsed.debug?.past??0} / 通常出馬表候補=${parsed.debug?.card??0}`,'warn')"
+          s=s.replace(old,new)
+          p.write_text(s,encoding='utf-8')
+      - name: Syntax check
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          m=re.search(r'<script>(.*)</script>',s,re.S)
+          Path('/tmp/index.js').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/index.js
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'fix: support netkeiba 5-run and 9-run race cards'
+          git push
