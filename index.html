@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v453-20260902 -->
+<!-- deploy-refresh-v454-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.53：再計算時刻・人気別補正の適用件数を表示</p>
+<p>クリーン版 v4.54：騎手のクラス別成績補正を追加</p>
 </header>
 <main>
 <div class="tabs">
@@ -636,9 +636,10 @@ function scoreRows(rows){
   return {score:Math.max(0,Math.min(100,score)),n,wins,places,popCount};
 }
 function jockeySuitability(row,meta){
-  if(!row?.jockey)return {score:null,label:'騎手不明',matchCount:0,total:0,reasons:[],popAdj:0,popN:0};
+  const empty=(label,total=0)=>({score:null,label,matchCount:0,total,reasons:[],popAdj:0,popN:0,classAdj:0,classN:0});
+  if(!row?.jockey)return empty('騎手不明');
   const all=jockeyHistoryBefore(row.jockey,meta?.date);
-  if(!all.length)return {score:null,label:'未学習',matchCount:0,total:0,reasons:[],popAdj:0,popN:0};
+  if(!all.length)return empty('未学習');
   const course=(meta?.surface||meta?.distance)?`${meta?.surface||'?'}${meta?.distance||'?'}m`:'';
   const exactPop=exactPopularity(row.pop);
   const factors=[
@@ -655,7 +656,7 @@ function jockeySuitability(row,meta){
     weighted+=q.score*f.weight;weightSum+=f.weight;
     if(f.label!=='総合'){rows.forEach(x=>matched.add(x));reasons.push(`${f.value} ${rows.length}鞍`)}
   }
-  if(!weightSum)return {score:null,label:'未学習',matchCount:0,total:all.length,reasons:[],popAdj:0,popN:0};
+  if(!weightSum)return empty('未学習',all.length);
   let popAdj=0,popN=0;
   if(exactPop){
     const popRows=all.filter(r=>exactPopularity(r.pop)===exactPop);
@@ -667,12 +668,24 @@ function jockeySuitability(row,meta){
       popRows.forEach(x=>matched.add(x));
     }
   }
-  const score=clampValue(weighted/weightSum+popAdj,0,100);
+  let classAdj=0,classN=0;
+  const cls=horseClassKey(meta);
+  if(cls){
+    const classRows=all.filter(r=>horseClassKey(r)===cls);
+    const classScore=scoreRows(classRows);
+    if(classScore){
+      classN=classRows.length;
+      classAdj=clampValue((classScore.score-50)*0.30,-6,6);
+      reasons.push(`クラス${cls} ${classN}鞍・補正${classAdj>=0?'+':''}${classAdj.toFixed(1)}`);
+      classRows.forEach(x=>matched.add(x));
+    }
+  }
+  const score=clampValue(weighted/weightSum+popAdj+classAdj,0,100);
   const matchCount=matched.size;
   let label='蓄積あり';
   if(all.length<3||matchCount<2)label='サンプル少';
   else if(all.length<10||matchCount<5)label='参考';
-  return {score,label,matchCount,total:all.length,reasons,popAdj,popN};
+  return {score,label,matchCount,total:all.length,reasons,popAdj,popN,classAdj,classN};
 }
 function clampValue(v,min,max){return Math.max(min,Math.min(max,v))}
 function isGenericRecoveredClass(name){
@@ -998,6 +1011,7 @@ function runChronologicalBacktest(){
   const positionBucketKey=(adj)=>adj>=3?'p3':adj>=1?'p1':adj>-1?'mid':adj>-3?'m1':'m3';
   const details=[];
   const popAdjustmentStats={applied:0,positive:0,negative:0,zero:0};
+  const classAdjustmentStats={applied:0,positive:0,negative:0,zero:0};
   const highPayoutDiagnostics=[];
   const qToBRegressions=[];
   const bRescuedWinners=[];
@@ -1016,6 +1030,7 @@ function runChronologicalBacktest(){
       const h=horseAbility(row,meta,Array.isArray(card.pastRuns)&&card.pastRuns.length?card.pastRuns:null);
       const q=jockeySuitability(row,meta);
       if(Number(q.popN)>0){popAdjustmentStats.applied++;if(Number(q.popAdj)>0.05)popAdjustmentStats.positive++;else if(Number(q.popAdj)<-0.05)popAdjustmentStats.negative++;else popAdjustmentStats.zero++;}
+      if(Number(q.classN)>0){classAdjustmentStats.applied++;if(Number(q.classAdj)>0.05)classAdjustmentStats.positive++;else if(Number(q.classAdj)<-0.05)classAdjustmentStats.negative++;else classAdjustmentStats.zero++;}
       let scoreA=null,scoreP=null,scoreQ=null,scoreB=null,scoreC=null,scoreD=null,scoreBQ=null,lineupAdj=0,dayAdj=0,lineupDetail=null;
       if(q.score!=null){
         const lp=jockeyLineupPattern(row,meta,cardRows);
@@ -1147,7 +1162,7 @@ function runChronologicalBacktest(){
   highPayoutDiagnostics.sort((a,b)=>b.odds-a.odds||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   qToBRegressions.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   bRescuedWinners.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
-  return {variants,stats,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,popAdjustmentStats,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
+  return {variants,stats,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,popAdjustmentStats,classAdjustmentStats,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
 }
 function renderBacktest(){
   const bt=runChronologicalBacktest();
@@ -1162,8 +1177,9 @@ function renderBacktest(){
   const horseN=bt.stats.h?.n||0;
   const blendN=bt.stats.m50?.n||0;
   const ps=bt.popAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
+  const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.53（騎手1～12人気別成績補正 ON・最大±8点）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.54（人気別補正 最大±8点＋騎手クラス補正 最大±6点）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   const metrics=['top1Win','top1Place','winnerTop3','exactTop3'];
   const best={};
   for(const m of metrics){
@@ -1362,7 +1378,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.53 起動。バックテストに再計算時刻と人気別補正の適用件数を表示します。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.54 起動。騎手のクラス別成績補正（最大±6点）を追加しました。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
