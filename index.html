@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v449-20260902 -->
+<!-- deploy-refresh-v450-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.49：馬単表裏・ワイド的中率と払戻保存を追加</p>
+<p>クリーン版 v4.50：払戻表の書式差を吸収して馬単・ワイドを復元</p>
 </header>
 <main>
 <div class="tabs">
@@ -366,15 +366,17 @@ function parseRaceCard(lines){
   return dedupe(out,r=>`${r.num}|${r.name}`);
 }
 function dedupe(arr,keyFn){const seen=new Set();return arr.filter(x=>{const k=keyFn(x);if(seen.has(k)) return false;seen.add(k);return true})}
-function parsePayouts(raw){
+function parsePayouts(raw,resultRows=[]){
   const result={exacta:[],wide:[]};
-  const wagerLabels=/^(?:単勝|複勝|枠連|馬連|ワイド|馬単|三連複|3連複|三連単|3連単)$/;
+  const wagerNames=['単勝','複勝','枠連','馬連','ワイド','馬単','三連複','3連複','三連単','3連単'];
+  const wagerLabels=new RegExp(`^(?:${wagerNames.join('|')})$`);
+  const amountList=text=>[...String(text||'').matchAll(/([\d,]+)\s*(?:円|¥|￥|&yen;)/gi)].map(x=>Number(x[1].replace(/,/g,''))).filter(x=>Number.isFinite(x)&&x>0);
   const parseBlock=(label,text)=>{
     const ordered=label==='馬単';
-    const comboRe=ordered?/(\d{1,2})\s*(?:→|⇒|->)\s*(\d{1,2})/g:/(\d{1,2})\s*[-－–―]\s*(\d{1,2})/g;
+    const comboRe=ordered?/(\d{1,2})\s*(?:→|⇒|->|>|＞)\s*(\d{1,2})/g:/(\d{1,2})\s*[-－−–―]\s*(\d{1,2})/g;
     const combos=[];let m;
     while((m=comboRe.exec(text)))combos.push({a:Number(m[1]),b:Number(m[2])});
-    const amounts=[...text.matchAll(/([\d,]+)\s*円/g)].map(x=>Number(x[1].replace(/,/g,''))).filter(x=>Number.isFinite(x)&&x>0);
+    const amounts=amountList(text);
     const target=label==='馬単'?result.exacta:label==='ワイド'?result.wide:null;
     if(!target)return;
     for(let i=0;i<Math.min(combos.length,amounts.length);i++)target.push({...combos[i],payout:amounts[i]});
@@ -385,14 +387,32 @@ function parsePayouts(raw){
     const idx=cells.findIndex(x=>x==='馬単'||x==='ワイド');
     if(idx>=0)parseBlock(cells[idx],cells.slice(idx+1).join(' '));
   }
+  const ls=linesOf(raw);
   if(!result.exacta.length||!result.wide.length){
-    const ls=linesOf(raw);
     for(let i=0;i<ls.length;i++){
       const label=ls[i];if(label!=='馬単'&&label!=='ワイド')continue;
       const block=[];
-      for(let j=i+1;j<Math.min(ls.length,i+14);j++){if(wagerLabels.test(ls[j]))break;block.push(ls[j])}
+      for(let j=i+1;j<Math.min(ls.length,i+20);j++){if(wagerLabels.test(ls[j]))break;block.push(ls[j])}
       parseBlock(label,block.join(' '));
     }
+  }
+  const normalized=String(raw||'').replace(/<br\s*\/?>/gi,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ');
+  const section=(label)=>{
+    const start=normalized.indexOf(label);if(start<0)return '';
+    let end=normalized.length;
+    for(const other of wagerNames){const p=normalized.indexOf(other,start+label.length);if(p>=0&&p<end)end=p}
+    return normalized.slice(start,end);
+  };
+  const ranked=[...(resultRows||[])].filter(x=>Number.isFinite(Number(x.rank))).sort((a,b)=>Number(a.rank)-Number(b.rank));
+  const first=ranked.find(x=>Number(x.rank)===1),second=ranked.find(x=>Number(x.rank)===2),third=ranked.find(x=>Number(x.rank)===3);
+  if(!result.exacta.length&&first&&second){
+    const amounts=amountList(section('馬単'));
+    if(amounts.length)result.exacta.push({a:Number(first.num),b:Number(second.num),payout:amounts[0],inferred:true});
+  }
+  if(!result.wide.length&&first&&second&&third){
+    const amounts=amountList(section('ワイド'));
+    const pairs=[[first,second],[first,third],[second,third]];
+    for(let i=0;i<Math.min(3,amounts.length);i++)result.wide.push({a:Number(pairs[i][0].num),b:Number(pairs[i][1].num),payout:amounts[i],inferred:true});
   }
   result.exacta=dedupe(result.exacta,x=>`${x.a}>${x.b}`);
   result.wide=dedupe(result.wide,x=>[x.a,x.b].sort((a,b)=>a-b).join('-'));
@@ -406,7 +426,7 @@ function parseAll(raw){
   const lines=linesOf(raw);
   if(!lines.length)return {error:'入力が空です'};
   const meta=parseMeta(lines),markdownRows=parseMarkdownResultRows(raw),resultRows=markdownRows.length>=3?markdownRows:parseResultRows(lines);
-  if(resultRows.length>=3){const payouts=parsePayouts(raw);return {meta,mode:'result',rows:resultRows,lines,pastRuns:[],payouts,debug:{result:resultRows.length,markdown:markdownRows.length,past:0,card:0,exacta:payouts.exacta.length,wide:payouts.wide.length}};}
+  if(resultRows.length>=3){const payouts=parsePayouts(raw,resultRows);return {meta,mode:'result',rows:resultRows,lines,pastRuns:[],payouts,debug:{result:resultRows.length,markdown:markdownRows.length,past:0,card:0,exacta:payouts.exacta.length,wide:payouts.wide.length}};}
   const pastRows=parsePastCard(lines);
   if(pastRows.length>=3){
     const pastRuns=extractHorsePastRuns(lines,pastRows);
@@ -1296,7 +1316,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.49 起動。馬単表裏・ワイド的中率と払戻保存に対応しました。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.50 起動。馬単・ワイド払戻の読み取りを強化しました。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
