@@ -12,7 +12,7 @@
 <!-- deploy-refresh-v433-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.44：馬柱プロフィール開始判定を強化</p>
+<p>クリーン版 v4.45：馬柱5件と評価対象走を分離＋折返し対応</p>
 </header>
 <main>
 <div class="tabs">
@@ -456,7 +456,7 @@ function extractHorsePastRuns(lines,cardRows){
   const names=[...new Set((cardRows||[]).map(r=>String(r.name||'').trim()).filter(Boolean))];
   if(!names.length)return out;
   const nameSet=new Set(names);
-  const dateRe=new RegExp(`^(20\\d{2})[./](\\d{1,2})[./](\\d{1,2})\\s+(${venues.join('|')})(\\d{1,2})$`);
+  const dateRe=new RegExp(`^(20\\d{2})[./](\\d{1,2})[./](\\d{1,2})\\s+(${venues.join('|')})(\\d{1,2}|取|取消|除|除外|中止)$`);
   // netkeiba can show turf courses as 芝2400(外) / 芝1600(内).
   const courseRe=/^(芝|ダ|障)(\d{3,4})(?:\((?:外|内)\))?\s+([0-9]+:[0-9]{2}(?:\.[0-9])?|[0-9]+(?:\.[0-9])?)\s+(良|稍重|稍|重|不良|稍|不)$/;
   const fieldRe=/^(\d+)頭\s+(\d+)番\s+(\d+)人\s+(.+?)\s+(\d{2,3}(?:\.\d)?)$/;
@@ -488,17 +488,36 @@ function extractHorsePastRuns(lines,cardRows){
     for(let i=start;i<stop;i++){
       const line=String(lines[i]||'').trim();
       const dm=line.match(dateRe);
-      if(!dm||i+3>=stop)continue;
-      const cm=String(lines[i+2]||'').trim().match(courseRe);
-      const fm=String(lines[i+3]||'').trim().match(fieldRe);
-      if(!cm||!fm)continue;
+      if(!dm)continue;
+      const date=`${dm[1]}/${String(dm[2]).padStart(2,'0')}/${String(dm[3]).padStart(2,'0')}`;
+      const status=String(dm[5]||'');
+      const rank=/^\d+$/.test(status)?Number(status):null;
+      if(rank==null){
+        // Keep cancel/exclude/non-finish rows as part of the visible 5-run card,
+        // but horseAbility ignores them because rank is null.
+        out.push({name:horseName,date,venue:dm[4],raceNo:null,raceName:'',className:'',surface:'',distance:null,time:'',going:'',rank:null,status,fieldSize:null,num:null,pop:null,jockey:'',burden:null,source:'pasted_horse_card'});
+        continue;
+      }
+      // Race names can wrap over multiple lines. Search forward for the course line
+      // instead of assuming it is always exactly two lines after the date.
+      let courseIdx=-1,cm=null;
+      for(let j=i+1;j<Math.min(stop,i+8);j++){
+        const hit=String(lines[j]||'').trim().match(courseRe);
+        if(hit){courseIdx=j;cm=hit;break}
+      }
+      if(courseIdx<0||!cm)continue;
+      let fieldIdx=-1,fm=null;
+      for(let j=courseIdx+1;j<Math.min(stop,courseIdx+5);j++){
+        const hit=String(lines[j]||'').trim().match(fieldRe);
+        if(hit){fieldIdx=j;fm=hit;break}
+      }
+      if(fieldIdx<0||!fm)continue;
       let going=cm[4];if(going==='稍')going='稍重';if(going==='不')going='不良';
+      const raceName=lines.slice(i+1,courseIdx).map(x=>String(x||'').trim()).filter(x=>x&&x!=='映像を見る').join(' ');
       out.push({
-        name:horseName,
-        date:`${dm[1]}/${String(dm[2]).padStart(2,'0')}/${String(dm[3]).padStart(2,'0')}`,
-        venue:dm[4],raceNo:null,raceName:String(lines[i+1]||'').trim(),className:String(lines[i+1]||'').trim(),
+        name:horseName,date,venue:dm[4],raceNo:null,raceName,className:raceName,
         surface:cm[1],distance:Number(cm[2]),time:cm[3],going,
-        rank:Number(dm[5]),fieldSize:Number(fm[1]),num:Number(fm[2]),pop:Number(fm[3]),jockey:fm[4],burden:Number(fm[5]),
+        rank,fieldSize:Number(fm[1]),num:Number(fm[2]),pop:Number(fm[3]),jockey:fm[4],burden:Number(fm[5]),
         source:'pasted_horse_card'
       });
     }
@@ -1118,10 +1137,13 @@ function renderPreview(p){
       const reason=q.reasons.length?q.reasons.join(' / '):`過去 ${q.total}鞍・条件一致なし`;
       const sourceLine=`位置 ${lp.posN}鞍（実${lp.posLiveN||0}/復${lp.posRecoveredN||0}） / 相手${lp.pairOpponents||0}人・比較${lp.pairMatches}回（実${lp.pairLiveMatches||0}/復${lp.pairRecoveredMatches||0}）`;
       const lineupText=lp.notes.length?`${lp.notes.slice(0,3).join(' / ')} / ${sourceLine}`:sourceLine;
-      const horseRuns=(Array.isArray(p.pastRuns)?p.pastRuns:[]).filter(x=>String(x.name||'')===String(r.name||'')&&Number.isFinite(Number(x.rank))).length;
+      const horseCards=(Array.isArray(p.pastRuns)?p.pastRuns:[]).filter(x=>String(x.name||'')===String(r.name||''));
+      const horseRuns=horseCards.filter(x=>Number.isFinite(Number(x.rank))).length;
+      const nonFinish=horseCards.length-horseRuns;
+      const horseRunText=nonFinish>0?`${horseCards.length}件<div class="muted">評価${horseRuns}走 / 取消等${nonFinish}</div>`:`${horseRuns}走`;
       const horseText=hs.score==null?'--':Math.round(hs.score);
       const horseReason=hs.reasons?.length?hs.reasons.slice(0,3).join(' / '):'過去走なし';
-      return `<tr><td>${r.num??''}</td><td>${esc(r.name)}</td><td>${horseRuns}走</td><td class="scoreCell ${scoreClass(hs.score)}">${horseText}<div class="muted">${esc(horseReason)}</div></td><td>${esc(r.jockey)}</td><td>${r.pop??'-'}</td><td>${r.odds??'-'}</td><td class="scoreCell ${scoreClass(base)}">${scoreText}</td><td class="scoreNote"><span class="scoreFlag">${esc(cp.label)}</span><div class="muted">${esc(cp.note)}</div></td><td class="scoreCell ${scoreClass(50+lp.adj)}">${adjText}</td><td class="scoreCell ${scoreClass(50+dp.adj)}">${dayAdjText}</td><td class="scoreNote"><span class="scoreFlag">${esc(nx.label)}</span><div class="muted">${esc(nx.note)}</div></td><td class="scoreCell ${scoreClass(finalScore)}">${finalText}</td><td><span class="scoreFlag">${esc(q.label)}</span><div class="muted">過去${q.total}鞍 / 一致${q.matchCount}鞍</div></td><td class="scoreNote"><span class="scoreFlag">${esc(dp.label)}</span><div class="muted">${esc(dp.note)}</div></td><td class="scoreNote"><span class="scoreFlag">${esc(lp.label)}</span><div class="muted">${esc(lineupText)}</div></td><td class="scoreNote">${esc(reason)}</td></tr>`;
+      return `<tr><td>${r.num??''}</td><td>${esc(r.name)}</td><td>${horseRunText}</td><td class="scoreCell ${scoreClass(hs.score)}">${horseText}<div class="muted">${esc(horseReason)}</div></td><td>${esc(r.jockey)}</td><td>${r.pop??'-'}</td><td>${r.odds??'-'}</td><td class="scoreCell ${scoreClass(base)}">${scoreText}</td><td class="scoreNote"><span class="scoreFlag">${esc(cp.label)}</span><div class="muted">${esc(cp.note)}</div></td><td class="scoreCell ${scoreClass(50+lp.adj)}">${adjText}</td><td class="scoreCell ${scoreClass(50+dp.adj)}">${dayAdjText}</td><td class="scoreNote"><span class="scoreFlag">${esc(nx.label)}</span><div class="muted">${esc(nx.note)}</div></td><td class="scoreCell ${scoreClass(finalScore)}">${finalText}</td><td><span class="scoreFlag">${esc(q.label)}</span><div class="muted">過去${q.total}鞍 / 一致${q.matchCount}鞍</div></td><td class="scoreNote"><span class="scoreFlag">${esc(dp.label)}</span><div class="muted">${esc(dp.note)}</div></td><td class="scoreNote"><span class="scoreFlag">${esc(lp.label)}</span><div class="muted">${esc(lineupText)}</div></td><td class="scoreNote">${esc(reason)}</td></tr>`;
     }).join('');
     html+=`</tbody></table></div>`;
   }else{
