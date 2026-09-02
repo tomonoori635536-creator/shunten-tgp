@@ -1,0 +1,39 @@
+name: patch-v443
+on:
+  push:
+    branches: [patch-v440]
+    paths:
+      - '.github/workflows/patch-v443.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep patch script
+        run: cp .github/scripts/patch_v443.py /tmp/patch_v443.py
+      - name: Checkout main
+        run: git fetch origin main && git checkout -B main origin/main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply patch
+        run: python /tmp/patch_v443.py
+      - name: Check JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          js=s.split('<script>',1)[1].rsplit('</script>',1)[0]
+          Path('/tmp/shunten-v443.js').write_text(js,encoding='utf-8')
+          PY
+          node --check /tmp/shunten-v443.js
+      - name: Commit v4.43
+        run: |
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: cap pasted horse card history at latest five runs'
+          git push origin HEAD:main
