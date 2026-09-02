@@ -12,7 +12,7 @@
 <!-- deploy-refresh-v433-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.35：v4.34分離BT＋netkeiba結果横表対応</p>
+<p>クリーン版 v4.36：結果ページ上部のレース映像タブ誤判定を修正</p>
 </header>
 <main>
 <div class="tabs">
@@ -202,7 +202,7 @@ function parseMarkdownResultRows(raw){
 }
 function parseResultRows(lines){
   const out=[];
-  const boundary=lines.findIndex(s=>/^(?:レース映像|払戻金|払戻し|コーナー通過順位)$/.test(String(s||'').trim()));
+  const boundary=lines.findIndex(s=>/^(?:払戻金|払戻し|コーナー通過順位)$/.test(String(s||'').trim()));
   const limit=boundary>0?boundary:lines.length;
   for(let i=0;i<limit-7;i++){
     if(!/^\d{1,2}$/.test(lines[i])) continue;
@@ -1047,7 +1047,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.34 起動。位置補正と相手比較補正を分離して時系列検証できます。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.36 起動。結果ページの着順表を最後まで読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
