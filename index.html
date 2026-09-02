@@ -12,7 +12,7 @@
 <!-- deploy-refresh-v433-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.37：Q→B順位悪化の的中馬診断を追加</p>
+<p>クリーン版 v4.38：Q→Bで救った勝ち馬診断を追加</p>
 </header>
 <main>
 <div class="tabs">
@@ -812,6 +812,7 @@ function runChronologicalBacktest(){
   const details=[];
   const highPayoutDiagnostics=[];
   const qToBRegressions=[];
+  const bRescuedWinners=[];
   let skipped=0;
   for(const pair of backtestRacePairs()){
     const result=pair.result,card=pair.card;
@@ -883,6 +884,19 @@ function runChronologicalBacktest(){
         pairLiveMatches:Number(winnerScored.lineupDetail?.pairLiveMatches)||0,pairRecoveredMatches:Number(winnerScored.lineupDetail?.pairRecoveredMatches)||0
       });
     }
+    if(winnerScored&&winnerRankB===1&&Number.isFinite(winnerRankQ)&&winnerRankQ>1){
+      bRescuedWinners.push({
+        date:meta.date||'',venue:meta.venue||'',raceNo:meta.raceNo||'',num:Number(winner.num),name:winner.name||'',
+        odds:Number.isFinite(winnerOdds)?winnerOdds:null,
+        pop:Number.isFinite(Number(winner.pop))?Number(winner.pop):Number.isFinite(Number(winnerScored.row?.pop))?Number(winnerScored.row.pop):null,
+        jockey:winnerScored.row?.jockey||winner.jockey||'',
+        scoreQ:winnerScored.scoreQ,scoreB:winnerScored.scoreB,rankQ:winnerRankQ,rankB:winnerRankB,
+        posAdj:Number(winnerScored.lineupDetail?.posAdj)||0,pairAdj:Number(winnerScored.lineupDetail?.pairAdj)||0,
+        posN:Number(winnerScored.lineupDetail?.posN)||0,posLiveN:Number(winnerScored.lineupDetail?.posLiveN)||0,posRecoveredN:Number(winnerScored.lineupDetail?.posRecoveredN)||0,
+        pairMatches:Number(winnerScored.lineupDetail?.pairMatches)||0,pairOpponents:Number(winnerScored.lineupDetail?.pairOpponents)||0,
+        pairLiveMatches:Number(winnerScored.lineupDetail?.pairLiveMatches)||0,pairRecoveredMatches:Number(winnerScored.lineupDetail?.pairRecoveredMatches)||0
+      });
+    }
     if(winnerScored&&Number.isFinite(winnerOdds)&&winnerOdds>=10){
       const rankA=rankOf('scoreA',winner.num),rankB=rankOf('scoreB',winner.num),rankC=rankOf('scoreC',winner.num),rankD=rankOf('scoreD',winner.num),rankH=rankOf('scoreH',winner.num),rankM55=rankOf('scoreM55',winner.num);
       if(rankB===1||rankD===1){
@@ -934,7 +948,8 @@ function runChronologicalBacktest(){
   }
   highPayoutDiagnostics.sort((a,b)=>b.odds-a.odds||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   qToBRegressions.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
-  return {variants,stats,details,highPayoutDiagnostics,qToBRegressions,positionBuckets,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
+  bRescuedWinners.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
+  return {variants,stats,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
 }
 function renderBacktest(){
   const bt=runChronologicalBacktest();
@@ -995,6 +1010,7 @@ function renderBacktest(){
   };
   const splitDiag=`<h3>位置 vs 相手比較 分離診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位→1着</th><th>1位→3着内</th><th>勝ち馬TOP3</th><th>単勝回収率</th></tr></thead><tbody>${splitKeys.map(splitRow).join('')}</tbody></table></div><p class="muted">A=騎手適性だけ、P=位置補正だけ追加、Q=相手比較補正だけ追加、B=位置＋相手比較。すべて同じ時系列条件で比較します。ここでは重みを変更せず、どの要素が改善に寄与しているかだけを確認します。</p>`;
   const qbDiag=(bt.qToBRegressions||[]).length?`<h3>Q→B順位悪化の的中馬診断</h3><div class="tablewrap"><table><thead><tr><th>レース</th><th>勝ち馬</th><th>単勝</th><th>人気</th><th>騎手</th><th>Q点 / 順位</th><th>位置補正</th><th>相手比較補正</th><th>B点 / 順位</th><th>位置サンプル</th><th>相手比較</th><th>データ由来</th></tr></thead><tbody>${bt.qToBRegressions.map(x=>`<tr><td>${esc(x.date)} ${esc(x.venue)} ${x.raceNo}R</td><td><b>${x.num} ${esc(x.name)}</b></td><td>${x.odds==null?'-':x.odds.toFixed(1)+'倍'}</td><td>${x.pop??'-'}</td><td>${esc(x.jockey)}</td><td>${scoreText(x.scoreQ)} / ${rankText(x.rankQ)}</td><td><b>${signed(x.posAdj)}</b></td><td>${signed(x.pairAdj)}</td><td>${scoreText(x.scoreB)} / ${rankText(x.rankB)}</td><td>${x.posN}鞍</td><td>${x.pairOpponents}人 / ${x.pairMatches}回</td><td class="btNote">位置 実${x.posLiveN}/復${x.posRecoveredN}<br>相手比較 実${x.pairLiveMatches}/復${x.pairRecoveredMatches}</td></tr>`).join('')}</tbody></table></div><p class="muted">実際の勝ち馬をQ（騎手適性＋相手比較）が1位評価したのに、位置補正を足したBでは1位から落ちたレースだけを表示します。位置補正がQの勝ち馬選択を邪魔しているケースを直接確認する診断で、重みは変更していません。</p>`:`<h3>Q→B順位悪化の的中馬診断</h3><p class="muted">該当レースはありません。現在の保存データでは、Qが1位で実際に勝った馬を位置補正がBの1位から落とした例はありません。</p>`;
+  const bqDiag=(bt.bRescuedWinners||[]).length?`<h3>Q→Bで救った勝ち馬診断</h3><div class="tablewrap"><table><thead><tr><th>レース</th><th>勝ち馬</th><th>単勝</th><th>人気</th><th>騎手</th><th>Q点 / 順位</th><th>位置補正</th><th>相手比較補正</th><th>B点 / 順位</th><th>位置サンプル</th><th>相手比較</th><th>データ由来</th></tr></thead><tbody>${bt.bRescuedWinners.map(x=>`<tr><td>${esc(x.date)} ${esc(x.venue)} ${x.raceNo}R</td><td><b>${x.num} ${esc(x.name)}</b></td><td>${x.odds==null?'-':x.odds.toFixed(1)+'倍'}</td><td>${x.pop??'-'}</td><td>${esc(x.jockey)}</td><td>${scoreText(x.scoreQ)} / ${rankText(x.rankQ)}</td><td><b>${signed(x.posAdj)}</b></td><td>${signed(x.pairAdj)}</td><td>${scoreText(x.scoreB)} / ${rankText(x.rankB)}</td><td>${x.posN}鞍</td><td>${x.pairOpponents}人 / ${x.pairMatches}回</td><td class="btNote">位置 実${x.posLiveN}/復${x.posRecoveredN}<br>相手比較 実${x.pairLiveMatches}/復${x.pairRecoveredMatches}</td></tr>`).join('')}</tbody></table></div><p class="muted">Qでは1位ではなかった実際の勝ち馬を、位置補正を加えたBが1位まで押し上げたレースだけを表示します。上の「Q→B順位悪化」と対にして、位置補正が失った勝ち馬と救った勝ち馬を比較します。重みは変更していません。</p>`:`<h3>Q→Bで救った勝ち馬診断</h3><p class="muted">該当レースはありません。現在の保存データでは、Qで1位でなかった勝ち馬をBが1位まで押し上げた例はありません。</p>`;
   const positionOrder=['p3','p1','mid','m1','m3'];
   const positionRow=(key)=>{
     const x=bt.positionBuckets?.[key];
@@ -1005,7 +1021,7 @@ function renderBacktest(){
     return `<tr><td><b>${esc(x.label)}</b></td><td>${x.n}</td><td>${signed(avgAdj)}</td><td>${backtestPct(x.wins,x.n)} <span class="muted">(${x.wins}/${x.n})</span></td><td>${backtestPct(x.places,x.n)} <span class="muted">(${x.places}/${x.n})</span></td><td>${roi==null?'-':roi.toFixed(1)+'%'}<div class="muted">ROI対象 ${x.oddsN}R / 投資${x.stake.toLocaleString()}円 / 払戻${x.ret.toLocaleString()}円</div></td><td>${avgOdds==null?'-':avgOdds.toFixed(2)+'倍'}</td></tr>`;
   };
   const positionDiag=`<h3>位置補正の強さ別診断（B 1位評価馬）</h3><div class="tablewrap"><table><thead><tr><th>位置補正帯</th><th>該当R</th><th>平均位置補正</th><th>1着率</th><th>3着内率</th><th>単勝回収率</th><th>平均選択単勝</th></tr></thead><tbody>${positionOrder.map(positionRow).join('')}</tbody></table></div><p class="muted">各レースでB（騎手適性＋並び）が1位評価した馬を、その馬の「位置補正」だけで5区分に分けた診断です。+3以上が本当に好成績か、位置補正が強すぎないかを確認します。境界は +3以上 / +1以上3未満 / -1より大きく+1未満 / -3より大きく-1以下 / -3以下 として重複なく集計します。重みは変更していません。</p>`;
-  $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${splitDiag}${qbDiag}${highDiag}${positionDiag}`;
+  $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${splitDiag}${qbDiag}${bqDiag}${highDiag}${positionDiag}`;
   $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th>${bt.variants.map(v=>`<th>${esc(v.name)} 1位</th>`).join('')}</tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];if(!x)return '<td class="muted">--</td>';return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}<div class="muted">単勝 ${x.odds??'-'}</div></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -1064,7 +1080,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.37 起動。Q→B順位悪化の的中馬診断を追加しました。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.38 起動。Q→Bで救った勝ち馬診断を追加しました。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
