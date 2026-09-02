@@ -97,3 +97,4 @@ jobs:
           git add index.html .github/workflows/v437.yml
           git commit -m 'feat: add Q-to-B winner regression diagnostic'
           git push
+# trigger v4.37
