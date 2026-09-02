@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v433-20260902 -->
+<!-- deploy-refresh-v446-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.45：馬柱5件と評価対象走を分離＋折返し対応</p>
+<p>クリーン版 v4.46：中止を含む馬柱件数と評価対象走を明確化</p>
 </header>
 <main>
 <div class="tabs">
@@ -1140,7 +1140,7 @@ function renderPreview(p){
       const horseCards=(Array.isArray(p.pastRuns)?p.pastRuns:[]).filter(x=>String(x.name||'')===String(r.name||''));
       const horseRuns=horseCards.filter(x=>Number.isFinite(Number(x.rank))).length;
       const nonFinish=horseCards.length-horseRuns;
-      const horseRunText=nonFinish>0?`${horseCards.length}件<div class="muted">評価${horseRuns}走 / 取消等${nonFinish}</div>`:`${horseRuns}走`;
+      const horseRunText=nonFinish>0?`${horseCards.length}件<div class="muted">評価${horseRuns}走 / 中止・取消等${nonFinish}</div>`:`${horseRuns}走`;
       const horseText=hs.score==null?'--':Math.round(hs.score);
       const horseReason=hs.reasons?.length?hs.reasons.slice(0,3).join(' / '):'過去走なし';
       return `<tr><td>${r.num??''}</td><td>${esc(r.name)}</td><td>${horseRunText}</td><td class="scoreCell ${scoreClass(hs.score)}">${horseText}<div class="muted">${esc(horseReason)}</div></td><td>${esc(r.jockey)}</td><td>${r.pop??'-'}</td><td>${r.odds??'-'}</td><td class="scoreCell ${scoreClass(base)}">${scoreText}</td><td class="scoreNote"><span class="scoreFlag">${esc(cp.label)}</span><div class="muted">${esc(cp.note)}</div></td><td class="scoreCell ${scoreClass(50+lp.adj)}">${adjText}</td><td class="scoreCell ${scoreClass(50+dp.adj)}">${dayAdjText}</td><td class="scoreNote"><span class="scoreFlag">${esc(nx.label)}</span><div class="muted">${esc(nx.note)}</div></td><td class="scoreCell ${scoreClass(finalScore)}">${finalText}</td><td><span class="scoreFlag">${esc(q.label)}</span><div class="muted">過去${q.total}鞍 / 一致${q.matchCount}鞍</div></td><td class="scoreNote"><span class="scoreFlag">${esc(dp.label)}</span><div class="muted">${esc(dp.note)}</div></td><td class="scoreNote"><span class="scoreFlag">${esc(lp.label)}</span><div class="muted">${esc(lineupText)}</div></td><td class="scoreNote">${esc(reason)}</td></tr>`;
@@ -1249,7 +1249,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.41 起動。今回貼った馬柱5走を読取時に固定して馬能力へ使います。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.46 起動。中止・取消も馬柱1件として表示し、着順のある走だけ馬能力へ使います。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
