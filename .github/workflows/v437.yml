@@ -11,7 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Apply patch
-        run: python .github/scripts/patch_v437.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/scripts/patch_v437.py')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace("setStatus('✓ クリーン版 v4.34 起動。位置補正と相手比較補正を分離して時系列検証できます。','ok');","setStatus('✓ クリーン版 v4.36 起動。結果ページの着順表を最後まで読み取ります。','ok');")
+          p.write_text(s,encoding='utf-8')
+          PY
+          python .github/scripts/patch_v437.py
       - name: Check JavaScript syntax
         run: |
           python - <<'PY'
@@ -22,6 +30,7 @@ jobs:
           Path('/tmp/app.js').write_text(s[a:b],encoding='utf-8')
           assert 'Q→B順位悪化の的中馬診断' in s
           assert 'qToBRegressions' in s
+          assert 'クリーン版 v4.37' in s
           PY
           node --check /tmp/app.js
       - name: Commit v4.37
