@@ -17,7 +17,9 @@ jobs:
         with:
           node-version: '20'
       - name: Apply patch
-        run: python ../shunten-tgp/.github/scripts/patch_v442.py
+        run: |
+          curl -fsSL 'https://raw.githubusercontent.com/tomonoori635536-creator/shunten-tgp/patch-v440/.github/scripts/patch_v442.py' -o /tmp/patch_v442.py
+          python /tmp/patch_v442.py
       - name: Check JavaScript syntax
         run: |
           python - <<'PY'
