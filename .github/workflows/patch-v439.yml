@@ -1,0 +1,39 @@
+name: patch-v439
+on:
+  push:
+    branches:
+      - patch-v439
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply v4.39 patch
+        run: python .github/scripts/patch_v439.py
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          a=s.index('<script>')+len('<script>')
+          b=s.rindex('</script>')
+          Path('/tmp/app.js').write_text(s[a:b],encoding='utf-8')
+          assert 'クリーン版 v4.39' in s
+          assert '直前騎乗 → 次の騎乗' in s
+          assert "patternTable('クラス別'" in s
+          PY
+          node --check /tmp/app.js
+      - name: Commit v4.39 to main
+        shell: bash
+        run: |
+          rm .github/scripts/patch_v439.py .github/workflows/patch-v439.yml
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add jockey class and next-ride transition patterns'
+          git push origin HEAD:main
