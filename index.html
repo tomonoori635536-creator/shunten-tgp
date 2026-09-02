@@ -12,7 +12,7 @@
 <!-- deploy-refresh-v433-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.39：騎手クラス別＋直前騎乗→次騎乗パターンを追加</p>
+<p>クリーン版 v4.40：馬能力は今回貼付の馬柱だけで評価</p>
 </header>
 <main>
 <div class="tabs">
@@ -745,8 +745,17 @@ function horseRecentScore(rows){
   const shrink=n/(n+1.5);
   return {score:50+(raw-50)*shrink,n};
 }
-function horseAbility(row,meta){
-  const all=horseHistoryBefore(row?.name,meta?.date).filter(r=>Number.isFinite(Number(r.rank)));
+function horseAbility(row,meta,sourceRuns=null){
+  const target=dateNumber(meta?.date);
+  const base=Array.isArray(sourceRuns)
+    ? sourceRuns.filter(r=>{
+        if(String(r.name||'')!==String(row?.name||''))return false;
+        if(!target)return true;
+        const d=dateNumber(r.date);
+        return d&&d<target;
+      })
+    : horseHistoryBefore(row?.name,meta?.date);
+  const all=base.filter(r=>Number.isFinite(Number(r.rank)));
   if(!all.length)return {score:null,label:'未学習',total:0,reasons:[]};
   const factors=[];
   const recent=horseRecentScore(all);
@@ -1032,14 +1041,14 @@ function renderPreview(p){
   if(!p.rows?.length){html+=`<p class="warn">馬データを認識できませんでした。</p>`;$('preview').innerHTML=html;return}
   if(p.mode==='card'){
     html+=`<p class="muted">馬能力は直近3走40%・同コース距離25%・同馬場15%・クラス20%の土台で、対象日より前の馬成績だけから計算します。該当データがない項目は残りの項目へ再配分します。騎手は適性＋並び補正を採用し、当日R・クラス別・直前騎乗→次騎乗は参考表示・学習継続です。馬能力と騎手の合成はバックテスト上の仮比較だけで、実戦表示の最終点にはまだ採用しません。</p>`;
-    html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>馬履歴</th><th>馬能力</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>クラス参考</th><th>並び補正</th><th>当日R参考</th><th>直前騎乗参考</th><th>最終騎手</th><th>信頼度</th><th>当日パターン</th><th>並び学習</th><th>今回の一致データ</th></tr></thead><tbody>`;
+    html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>今回馬柱</th><th>馬能力</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>クラス参考</th><th>並び補正</th><th>当日R参考</th><th>直前騎乗参考</th><th>最終騎手</th><th>信頼度</th><th>当日パターン</th><th>並び学習</th><th>今回の一致データ</th></tr></thead><tbody>`;
     html+=p.rows.map(r=>{
       const q=jockeySuitability(r,m);
       const lp=jockeyLineupPattern(r,m,p.rows);
       const dp=jockeyDayRacePattern(r,m);
       const cp=jockeyClassPattern(r,m);
       const nx=nextRidePatternBefore(r,m);
-      const hs=horseAbility(r,m);
+      const hs=horseAbility(r,m,p.pastRuns);
       const base=q.score==null?null:q.score;
       const finalScore=base==null?null:clampValue(base+lp.adj,0,100);
       const scoreText=base==null?'--':Math.round(base);
@@ -1049,7 +1058,7 @@ function renderPreview(p){
       const reason=q.reasons.length?q.reasons.join(' / '):`過去 ${q.total}鞍・条件一致なし`;
       const sourceLine=`位置 ${lp.posN}鞍（実${lp.posLiveN||0}/復${lp.posRecoveredN||0}） / 相手${lp.pairOpponents||0}人・比較${lp.pairMatches}回（実${lp.pairLiveMatches||0}/復${lp.pairRecoveredMatches||0}）`;
       const lineupText=lp.notes.length?`${lp.notes.slice(0,3).join(' / ')} / ${sourceLine}`:sourceLine;
-      const horseRuns=horseHistoryBefore(r.name,m.date).length;
+      const horseRuns=(Array.isArray(p.pastRuns)?p.pastRuns:[]).filter(x=>String(x.name||'')===String(r.name||'')&&Number.isFinite(Number(x.rank))).length;
       const horseText=hs.score==null?'--':Math.round(hs.score);
       const horseReason=hs.reasons?.length?hs.reasons.slice(0,3).join(' / '):'過去走なし';
       return `<tr><td>${r.num??''}</td><td>${esc(r.name)}</td><td>${horseRuns}走</td><td class="scoreCell ${scoreClass(hs.score)}">${horseText}<div class="muted">${esc(horseReason)}</div></td><td>${esc(r.jockey)}</td><td>${r.pop??'-'}</td><td>${r.odds??'-'}</td><td class="scoreCell ${scoreClass(base)}">${scoreText}</td><td class="scoreNote"><span class="scoreFlag">${esc(cp.label)}</span><div class="muted">${esc(cp.note)}</div></td><td class="scoreCell ${scoreClass(50+lp.adj)}">${adjText}</td><td class="scoreCell ${scoreClass(50+dp.adj)}">${dayAdjText}</td><td class="scoreNote"><span class="scoreFlag">${esc(nx.label)}</span><div class="muted">${esc(nx.note)}</div></td><td class="scoreCell ${scoreClass(finalScore)}">${finalText}</td><td><span class="scoreFlag">${esc(q.label)}</span><div class="muted">過去${q.total}鞍 / 一致${q.matchCount}鞍</div></td><td class="scoreNote"><span class="scoreFlag">${esc(dp.label)}</span><div class="muted">${esc(dp.note)}</div></td><td class="scoreNote"><span class="scoreFlag">${esc(lp.label)}</span><div class="muted">${esc(lineupText)}</div></td><td class="scoreNote">${esc(reason)}</td></tr>`;
