@@ -1,0 +1,32 @@
+name: patch-v435
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-v435.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index
+        run: python .github/scripts/patch_v435.py
+      - name: Syntax check JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          js=s.split('<script>',1)[1].rsplit('</script>',1)[0]
+          Path('/tmp/index.js').write_text(js,encoding='utf-8')
+          PY
+          node --check /tmp/index.js
+      - name: Commit final app only
+        run: |
+          git config user.name "ChatGPT Codex Connector"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/scripts/patch_v435.py .github/workflows/patch-v435.yml vercel.json
+          git add index.html
+          git commit -m "fix: support netkeiba markdown result tables"
+          git push
