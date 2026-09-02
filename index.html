@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v446-20260902 -->
+<!-- deploy-refresh-v447-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.46：中止を含む馬柱件数と評価対象走を明確化</p>
+<p>クリーン版 v4.47：D＋B平均・D＋Q平均をバックテスト追加</p>
 </header>
 <main>
 <div class="tabs">
@@ -42,7 +42,7 @@
 <section class="panel view" id="backtestView">
 <h2>時系列バックテスト</h2>
 <p>保存済みの「出馬表→結果」を使って、対象レースより後の結果を見ない真の時系列で比較します。馬能力Hと現在採用中の騎手Bを50:50・55:45・60:40・70:30・80:20で仮合成します。さらに各方式の1位評価馬を単勝100円固定で買った場合の確定単勝オッズ回収率も仮検証します。ここで最良でも正式採用にはせず、データ増加後に再検証します。取消・除外など結果に存在しない馬は評価対象から外します。</p>
-<div class="row"><button class="btn primary" id="backtestBtn">バックテスト再計算</button><span class="muted">A=騎手適性 / P=＋位置だけ / Q=＋相手比較だけ / B=＋位置＋相手比較 / C=＋当日R / D=＋並び＋当日R / H=馬能力 / 仮=馬:騎手 50:50 / 55:45 / 60:40 / 70:30 / 80:20</span></div>
+<div class="row"><button class="btn primary" id="backtestBtn">バックテスト再計算</button><span class="muted">A=騎手適性 / P=＋位置だけ / Q=＋相手比較だけ / B=＋位置＋相手比較 / C=＋当日R / D=＋並び＋当日R / DB=DとBの平均 / DQ=DとQの平均 / H=馬能力 / 仮=馬:騎手 50:50 / 55:45 / 60:40 / 70:30 / 80:20</span></div>
 <div class="summary" style="margin-top:14px"><div class="chip"><b>保存結果</b><div class="big" id="btResultCount">0</div></div><div class="chip"><b>保存出馬表</b><div class="big" id="btCardCount">0</div></div><div class="chip"><b>評価対象</b><div class="big" id="btEvalCount">0</div></div><div class="chip"><b>除外</b><div class="big" id="btSkipCount">0</div></div></div>
 <div id="backtestStatus" class="status">バックテストタブを開くと計算します。</div>
 <div id="backtestSummary"></div>
@@ -881,6 +881,8 @@ function runChronologicalBacktest(){
     {key:'b',name:'B ＋位置＋相手比較（現在採用）',score:'scoreB'},
     {key:'c',name:'C ＋当日R',score:'scoreC'},
     {key:'d',name:'D ＋並び＋当日R',score:'scoreD'},
+    {key:'db',name:'D＋B 平均',score:'scoreDB'},
+    {key:'dq',name:'D＋Q 平均',score:'scoreDQ'},
     {key:'h',name:'H 馬能力のみ',score:'scoreH'},
     {key:'m50',name:'仮 50:50 馬50＋騎手50',score:'scoreM50'},
     {key:'m55',name:'仮 55:45 馬55＋騎手45',score:'scoreM55'},
@@ -915,7 +917,7 @@ function runChronologicalBacktest(){
     const scored=cardRows.map(row=>{
       const h=horseAbility(row,meta,Array.isArray(card.pastRuns)&&card.pastRuns.length?card.pastRuns:null);
       const q=jockeySuitability(row,meta);
-      let scoreA=null,scoreP=null,scoreQ=null,scoreB=null,scoreC=null,scoreD=null,lineupAdj=0,dayAdj=0,lineupDetail=null;
+      let scoreA=null,scoreP=null,scoreQ=null,scoreB=null,scoreC=null,scoreD=null,scoreDB=null,scoreDQ=null,lineupAdj=0,dayAdj=0,lineupDetail=null;
       if(q.score!=null){
         const lp=jockeyLineupPattern(row,meta,cardRows);
         const dp=jockeyDayRacePattern(row,meta);
@@ -929,11 +931,13 @@ function runChronologicalBacktest(){
         scoreB=clampValue(base+lineupAdj,0,100);
         scoreC=clampValue(base+dayAdj,0,100);
         scoreD=clampValue(base+lineupAdj+dayAdj,0,100);
+        scoreDB=clampValue((scoreD+scoreB)/2,0,100);
+        scoreDQ=clampValue((scoreD+scoreQ)/2,0,100);
       }
       const horse=Number.isFinite(Number(h.score))?Number(h.score):null;
       const jockey=Number.isFinite(Number(scoreB))?Number(scoreB):null;
       const blend=(hw)=>horse==null||jockey==null?null:clampValue(horse*hw+jockey*(1-hw),0,100);
-      return {row,scoreA,scoreP,scoreQ,scoreB,scoreC,scoreD,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,lineupDetail,
+      return {row,scoreA,scoreP,scoreQ,scoreB,scoreC,scoreD,scoreDB,scoreDQ,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,lineupDetail,
         scoreM50:blend(0.50),scoreM55:blend(0.55),scoreM60:blend(0.60),scoreM70:blend(0.70),scoreM80:blend(0.80)};
     });
     const actualTop3=new Set(resultRows.filter(x=>Number(x.rank)>=1&&Number(x.rank)<=3).map(x=>Number(x.num)));
@@ -1249,7 +1253,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.46 起動。中止・取消も馬柱1件として表示し、着順のある走だけ馬能力へ使います。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.47 起動。D＋B平均・D＋Q平均をバックテストへ追加しました。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
