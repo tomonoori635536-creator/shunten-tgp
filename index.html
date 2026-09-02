@@ -12,7 +12,7 @@
 <!-- deploy-refresh-v433-20260902 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.42：馬柱の馬別区切り＋外/内コース読取を修正</p>
+<p>クリーン版 v4.43：5走版は馬ごとに最新5走へ固定</p>
 </header>
 <main>
 <div class="tabs">
@@ -495,8 +495,29 @@ function extractHorsePastRuns(lines,cardRows){
       });
     }
   }
-  const seen=new Set();
-  return out.filter(r=>{const k=horseHistoryKey(r);if(!k||seen.has(k))return false;seen.add(k);return true});
+  // The copied netkeiba page can contain hidden 9-run text even when the 5-run tab is shown.
+  // Canonicalize per horse, remove duplicate race dates, then keep only the latest 5 runs.
+  const byHorse=new Map();
+  for(const r of out){
+    const horse=String(r.name||'').trim();
+    if(!horse)continue;
+    if(!byHorse.has(horse))byHorse.set(horse,[]);
+    byHorse.get(horse).push(r);
+  }
+  const fixed=[];
+  for(const [horse,rows] of byHorse){
+    const seen=new Set();
+    const clean=rows
+      .sort((a,b)=>dateNumber(b.date)-dateNumber(a.date))
+      .filter(r=>{
+        const k=[r.date||'',r.venue||'',r.name||''].join('|');
+        if(!r.date||seen.has(k))return false;
+        seen.add(k);return true;
+      })
+      .slice(0,5);
+    fixed.push(...clean);
+  }
+  return fixed;
 }
 function scoreRows(rows){
   const n=rows.length;if(!n)return null;
