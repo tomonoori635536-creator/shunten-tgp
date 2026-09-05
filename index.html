@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v460-20260905 -->
+<!-- deploy-refresh-v461-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.60：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.61：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -234,7 +234,7 @@ function parseMarkdownPastCard(raw){
   for(const rawLine of String(raw||'').replace(/\r/g,'').split('\n')){
     const line=rawLine.trim();if(!line.startsWith('|'))continue;
     const rawCells=line.split('|').slice(1,-1);
-    if(rawCells.length<34)continue;
+    if(rawCells.length<10)continue;
     const cells=rawCells.map(cleanPasteToken);
     const frame=Number(cells[0]),num=Number(cells[1]);
     if(!Number.isInteger(frame)||frame<1||frame>8||!Number.isInteger(num)||num<1||num>30)continue;
@@ -244,7 +244,8 @@ function parseMarkdownPastCard(raw){
     if(!name)continue;
     const trainerMatch=profile.match(trainerTail),trainer=trainerMatch?trainerMatch[1]:'';
     const sexCell=String(cells[9]||'').replace(/\s+/g,' ').trim();
-    const sexMatch=sexCell.match(/^((?:牡|牝|セ)\d+).(.+?)\s+\d{2,3}(?:\.\d)?$/);
+    const sexMatch=sexCell.match(/^((?:牡|牝|セ)\d+)(?:青鹿|黒鹿|栃栗|栗|鹿|芦|青|白)(.+?)\s+\d{2,3}(?:\.\d)?$/)
+      ||sexCell.match(/^((?:牡|牝|セ)\d+)\s*(.+?)\s+\d{2,3}(?:\.\d)?$/);
     if(!sexMatch)continue;
     const sexAge=sexMatch[1],jockey=resolveCardJockey(sexMatch[2].trim());
     const om=String(cells[8]||'').match(/(\d+(?:\.\d+)?)\s*\((\d{1,2})人気\)/);
@@ -1465,7 +1466,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.60 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.61 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
