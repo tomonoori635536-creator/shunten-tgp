@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v464-20260905 -->
+<!-- deploy-refresh-v465-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.64：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.65：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1086,13 +1086,23 @@ function predictJockeyPopularityPair(cardRows,meta){
   const target=dateNumber(meta?.date);
   const hist=(state.races||[]).filter(r=>{const d=dateNumber(r.meta?.date);return d&&target&&d<target});
   if(hist.length<5)return null;
-  const role1=new Map(),role2=new Map();
-  const add=(map,key,hit)=>{const x=map.get(key)||{n:0,h:0};x.n++;if(hit)x.h++;map.set(key,x)};
-  for(const race of hist)for(const r of race.rows||[]){
-    const pop=Number(r.pop),j=resolveCardJockey(r.jockey);
-    if(!j||!Number.isFinite(pop)||pop<1)continue;
-    const key=`${j}|${pop}`;
-    add(role1,key,Number(r.rank)===1);add(role2,key,Number(r.rank)===2);
+  const role1=new Map(),role2=new Map(),pairMap=new Map(),popPairMap=new Map();
+  const addRole=(map,key,hit)=>{const x=map.get(key)||{n:0,h:0};x.n++;if(hit)x.h++;map.set(key,x)};
+  const addPair=(map,key,hit)=>{const x=map.get(key)||{opp:0,hit:0};x.opp++;if(hit)x.hit++;map.set(key,x)};
+  for(const race of hist){
+    const rr=(race.rows||[]).filter(x=>Number.isFinite(Number(x.rank))).map(x=>({
+      num:Number(x.num),rank:Number(x.rank),pop:Number(x.pop),jockey:resolveCardJockey(x.jockey)
+    })).filter(x=>x.jockey&&Number.isFinite(x.pop)&&x.pop>=1);
+    for(const x of rr){
+      const key=`${x.jockey}|${x.pop}`;
+      addRole(role1,key,x.rank===1);addRole(role2,key,x.rank===2);
+    }
+    for(const x of rr)for(const y of rr){
+      if(x.num===y.num)continue;
+      const hit=x.rank===1&&y.rank===2;
+      addPair(pairMap,`${x.jockey}|${x.pop}>>${y.jockey}|${y.pop}`,hit);
+      addPair(popPairMap,`${x.pop}>>${y.pop}`,hit);
+    }
   }
   let best=null;
   for(const first of cardRows)for(const second of cardRows){
@@ -1101,19 +1111,13 @@ function predictJockeyPopularityPair(cardRows,meta){
     const j1=resolveCardJockey(first.jockey),j2=resolveCardJockey(second.jockey);
     if(!j1||!j2||!Number.isFinite(p1)||!Number.isFinite(p2))continue;
     const a=role1.get(`${j1}|${p1}`)||{n:0,h:0},b=role2.get(`${j2}|${p2}`)||{n:0,h:0};
-    let pairOpp=0,pairHit=0,popOpp=0,popHit=0;
-    for(const race of hist){
-      const rr=(race.rows||[]).filter(x=>Number.isFinite(Number(x.rank)));
-      const x=rr.find(z=>resolveCardJockey(z.jockey)===j1&&Number(z.pop)===p1);
-      const y=rr.find(z=>Number(z.num)!==Number(x?.num)&&resolveCardJockey(z.jockey)===j2&&Number(z.pop)===p2);
-      if(x&&y){pairOpp++;if(Number(x.rank)===1&&Number(y.rank)===2)pairHit++}
-      const px=rr.find(z=>Number(z.pop)===p1),py=rr.find(z=>Number(z.num)!==Number(px?.num)&&Number(z.pop)===p2);
-      if(px&&py){popOpp++;if(Number(px.rank)===1&&Number(py.rank)===2)popHit++}
-    }
+    const pair=pairMap.get(`${j1}|${p1}>>${j2}|${p2}`)||{opp:0,hit:0};
+    const popPair=popPairMap.get(`${p1}>>${p2}`)||{opp:0,hit:0};
     const firstRate=(a.h+0.5)/(a.n+5),secondRate=(b.h+0.5)/(b.n+5);
-    const pairRate=(pairHit+0.25)/(pairOpp+8),popRate=(popHit+0.5)/(popOpp+8);
+    const pairRate=(pair.hit+0.25)/(pair.opp+8),popRate=(popPair.hit+0.5)/(popPair.opp+8);
     const score=firstRate*0.35+secondRate*0.30+popRate*0.20+pairRate*0.15;
-    const cand={first,second,score,support:a.n+b.n+pairOpp+popOpp,firstN:a.n,firstHits:a.h,secondN:b.n,secondHits:b.h,pairOpp,pairHit,popOpp,popHit};
+    const support=a.n+b.n+pair.opp+popPair.opp;
+    const cand={first,second,score,support,firstN:a.n,firstHits:a.h,secondN:b.n,secondHits:b.h,pairOpp:pair.opp,pairHit:pair.hit,popOpp:popPair.opp,popHit:popPair.hit};
     if(!best||cand.score>best.score||cand.score===best.score&&cand.support>best.support)best=cand;
   }
   return best;
@@ -1539,7 +1543,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.64 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.65 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
