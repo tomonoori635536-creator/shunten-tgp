@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v465-20260905 -->
+<!-- deploy-refresh-v466-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.65：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.66：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1091,7 +1091,7 @@ function predictJockeyPopularityPair(cardRows,meta){
   const addPair=(map,key,hit)=>{const x=map.get(key)||{opp:0,hit:0};x.opp++;if(hit)x.hit++;map.set(key,x)};
   for(const race of hist){
     const rr=(race.rows||[]).filter(x=>Number.isFinite(Number(x.rank))).map(x=>({
-      num:Number(x.num),rank:Number(x.rank),pop:Number(x.pop),jockey:resolveCardJockey(x.jockey)
+      num:Number(x.num),rank:Number(x.rank),pop:Number(x.pop),jockey:String(x.jockey||'').trim()
     })).filter(x=>x.jockey&&Number.isFinite(x.pop)&&x.pop>=1);
     for(const x of rr){
       const key=`${x.jockey}|${x.pop}`;
@@ -1108,7 +1108,7 @@ function predictJockeyPopularityPair(cardRows,meta){
   for(const first of cardRows)for(const second of cardRows){
     if(Number(first.num)===Number(second.num))continue;
     const p1=Number(first.pop),p2=Number(second.pop);
-    const j1=resolveCardJockey(first.jockey),j2=resolveCardJockey(second.jockey);
+    const j1=String(first.jockey||'').trim(),j2=String(second.jockey||'').trim();
     if(!j1||!j2||!Number.isFinite(p1)||!Number.isFinite(p2))continue;
     const a=role1.get(`${j1}|${p1}`)||{n:0,h:0},b=role2.get(`${j2}|${p2}`)||{n:0,h:0};
     const pair=pairMap.get(`${j1}|${p1}>>${j2}|${p2}`)||{opp:0,hit:0};
@@ -1543,7 +1543,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.65 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.66 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
