@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v468-20260905 -->
+<!-- deploy-refresh-v469-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.68：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.69：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1082,14 +1082,17 @@ function backtestRacePairs(){
   for(const c of (state.raceCards||[]))cards.set(backtestKey(c.meta),c);
   return [...(state.races||[])].sort((a,b)=>dateNumber(a.meta?.date)-dateNumber(b.meta?.date)||Number(a.meta?.raceNo||0)-Number(b.meta?.raceNo||0)).map(result=>({result,card:cards.get(backtestKey(result.meta))||null}));
 }
+const jockeyPopHistoryCache=new Map();
 function predictJockeyPopularityPair(cardRows,meta){
   const target=dateNumber(meta?.date);
-  const hist=(state.races||[]).filter(r=>{const d=dateNumber(r.meta?.date);return d&&target&&d<target});
-  if(hist.length<5)return null;
-  const role1=new Map(),role2=new Map(),pairMap=new Map(),popPairMap=new Map();
-  const addRole=(map,key,hit)=>{const x=map.get(key)||{n:0,h:0};x.n++;if(hit)x.h++;map.set(key,x)};
-  const addPair=(map,key,hit)=>{const x=map.get(key)||{opp:0,hit:0};x.opp++;if(hit)x.hit++;map.set(key,x)};
-  for(const race of hist){
+  let cached=jockeyPopHistoryCache.get(target);
+  if(!cached){
+    const hist=(state.races||[]).filter(r=>{const d=dateNumber(r.meta?.date);return d&&target&&d<target});
+    if(hist.length<5)return null;
+    const role1=new Map(),role2=new Map(),pairMap=new Map(),popPairMap=new Map();
+    const addRole=(map,key,hit)=>{const x=map.get(key)||{n:0,h:0};x.n++;if(hit)x.h++;map.set(key,x)};
+    const addPair=(map,key,hit)=>{const x=map.get(key)||{opp:0,hit:0};x.opp++;if(hit)x.hit++;map.set(key,x)};
+    for(const race of hist){
     const rr=(race.rows||[]).filter(x=>Number.isFinite(Number(x.rank))).map(x=>({
       num:Number(x.num),rank:Number(x.rank),pop:Number(x.pop),jockey:String(x.jockey||'').trim()
     })).filter(x=>x.jockey&&Number.isFinite(x.pop)&&x.pop>=1);
@@ -1101,9 +1104,13 @@ function predictJockeyPopularityPair(cardRows,meta){
       if(x.num===y.num)continue;
       const hit=x.rank===1&&y.rank===2;
       addPair(pairMap,`${x.jockey}|${x.pop}>>${y.jockey}|${y.pop}`,hit);
-      addPair(popPairMap,`${x.pop}>>${y.pop}`,hit);
+        addPair(popPairMap,`${x.pop}>>${y.pop}`,hit);
+      }
     }
+    cached={role1,role2,pairMap,popPairMap};
+    jockeyPopHistoryCache.set(target,cached);
   }
+  const {role1,role2,pairMap,popPairMap}=cached;
   let best=null,secondBest=null;
   for(const first of cardRows)for(const second of cardRows){
     if(Number(first.num)===Number(second.num))continue;
@@ -1126,6 +1133,7 @@ function predictJockeyPopularityPair(cardRows,meta){
 }
 
 function runChronologicalBacktest(){
+  jockeyPopHistoryCache.clear();
   state=loadState();
   if(!Array.isArray(state.races))state.races=[];
   if(!Array.isArray(state.raceCards))state.raceCards=[];
@@ -1580,7 +1588,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.68 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.69 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
