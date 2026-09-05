@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v471-20260905 -->
+<!-- deploy-refresh-v472-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.71：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.72：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -776,11 +776,12 @@ function jockeySuitability(row,meta){
   if(trainer){
     const comboRows=all.filter(r=>String(r.trainer||'').trim()===trainer);
     comboN=comboRows.length;
-    if(comboN>=3){
+    const comboCap=comboN>=20?6:comboN>=10?4:comboN>=5?2:0;
+    if(comboCap>0){
       const comboScore=scoreRows(comboRows);
-      if(comboScore){comboAdj=clampValue((comboScore.score-50)*0.25,-4,4);reasons.push(`${trainer}厩舎コンビ ${comboN}鞍・補正${comboAdj>=0?'+':''}${comboAdj.toFixed(1)}`);comboRows.forEach(x=>matched.add(x));}
+      if(comboScore){comboAdj=clampValue((comboScore.score-50)*0.25,-comboCap,comboCap);reasons.push(`${trainer}厩舎コンビ ${comboN}鞍・上限±${comboCap}・補正${comboAdj>=0?'+':''}${comboAdj.toFixed(1)}`);comboRows.forEach(x=>matched.add(x));}
     }else if(comboN>0){
-      reasons.push(`${trainer}厩舎コンビ ${comboN}鞍・3鞍未満で補正なし`);
+      reasons.push(`${trainer}厩舎コンビ ${comboN}鞍・5鞍未満で表示のみ`);
     }
   }
   const score=clampValue(weighted/weightSum+popAdj+classAdj+comboAdj,0,100);
@@ -1189,7 +1190,7 @@ function runChronologicalBacktest(){
       const q=jockeySuitability(row,meta);
       if(Number(q.popN)>0){popAdjustmentStats.applied++;if(Number(q.popAdj)>0.05)popAdjustmentStats.positive++;else if(Number(q.popAdj)<-0.05)popAdjustmentStats.negative++;else popAdjustmentStats.zero++;}
       if(Number(q.classN)>0){classAdjustmentStats.applied++;if(Number(q.classAdj)>0.05)classAdjustmentStats.positive++;else if(Number(q.classAdj)<-0.05)classAdjustmentStats.negative++;else classAdjustmentStats.zero++;}
-      if(Number(q.comboN)>0)comboAdjustmentStats.available++;if(Number(q.comboN)>=3){comboAdjustmentStats.applied++;if(Number(q.comboAdj)>0.05)comboAdjustmentStats.positive++;else if(Number(q.comboAdj)<-0.05)comboAdjustmentStats.negative++;else comboAdjustmentStats.zero++;}
+      if(Number(q.comboN)>0)comboAdjustmentStats.available++;if(Number(q.comboN)>=5){comboAdjustmentStats.applied++;if(Number(q.comboAdj)>0.05)comboAdjustmentStats.positive++;else if(Number(q.comboAdj)<-0.05)comboAdjustmentStats.negative++;else comboAdjustmentStats.zero++;}
       let scoreA=null,scoreP=null,scoreQ=null,scoreB=null,scoreC=null,scoreD=null,scoreBQ=null,lineupAdj=0,dayAdj=0,lineupDetail=null;
       if(q.score!=null){
         const lp=jockeyLineupPattern(row,meta,cardRows);
@@ -1431,7 +1432,7 @@ function renderBacktest(){
   const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.55（人気別±8＋クラス±6＋調教師コンビ試験±4点）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 3鞍以上で補正${ts.applied}頭（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.72（人気別±8＋クラス±6＋調教師コンビ段階補正）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
   const jpReverseRoi=jps.reverseStake?100*jps.reverseReturn/jps.reverseStake:null;
