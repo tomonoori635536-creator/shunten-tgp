@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v462-20260905 -->
+<!-- deploy-refresh-v463-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.62：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.63：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -372,7 +372,7 @@ function resolveCardJockey(name){
 }
 function parsePastCard(lines){
   const out=[];
-  const trainerRe=/^(?:愛知|兵庫|北海道|高知|佐賀|笠松|岩手|船橋|浦和|川崎|大井|金沢|名古屋|園田)[・･]/;
+  const trainerRe=/^(?:(?:愛知|兵庫|北海道|高知|佐賀|笠松|岩手|船橋|浦和|川崎|大井|金沢|名古屋|園田)?[・･])/;
   const noiseRe=/^(?:--|\[Select\]|Select|印|Image|映像を見る|登録|グループ|編集|馬メモ|切替)$/;
   for(let i=0;i<lines.length;i++){
     const line=String(lines[i]||'').trim();
@@ -1487,7 +1487,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.62 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.63 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
