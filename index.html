@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v457-20260905 -->
+<!-- deploy-refresh-v458-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.57：騎手詳細に調教師コンビ別成績を追加</p>
+<p>クリーン版 v4.58：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -218,6 +218,46 @@ function parseMarkdownResultRows(raw){
   }
   return dedupe(out,r=>`${r.rank}|${r.num}|${r.name}`);
 }
+function parseMarkdownPastCard(raw){
+  const rows=[],pastRuns=[];
+  const trainerTail=/(?:愛知|兵庫|北海道|高知|佐賀|笠松|岩手|船橋|浦和|川崎|大井|金沢|名古屋|園田)?[・･]([^・･\s]+)\s*$/;
+  for(const rawLine of String(raw||'').replace(/\r/g,'').split('\n')){
+    const line=rawLine.trim();if(!line.startsWith('|'))continue;
+    const rawCells=line.split('|').slice(1,-1);
+    if(rawCells.length<34)continue;
+    const cells=rawCells.map(cleanPasteToken);
+    const frame=Number(cells[0]),num=Number(cells[1]);
+    if(!Number.isInteger(frame)||frame<1||frame>8||!Number.isInteger(num)||num<1||num>30)continue;
+    const profileRaw=rawCells[4]||'',profile=cells[4]||'';
+    const horseMatch=profileRaw.match(/\[\*{0,2}([^\]*]+?)\*{0,2}\]\(https?:\/\/db\.netkeiba\.com\/horse\/[^)]+\)/i);
+    const name=horseMatch?cleanPasteToken(horseMatch[1]):'';
+    if(!name)continue;
+    const trainerMatch=profile.match(trainerTail),trainer=trainerMatch?trainerMatch[1]:'';
+    const sexCell=String(cells[9]||'').replace(/\s+/g,' ').trim();
+    const sexMatch=sexCell.match(/^((?:牡|牝|セ)\d+).(.+?)\s+\d{2,3}(?:\.\d)?$/);
+    if(!sexMatch)continue;
+    const sexAge=sexMatch[1],jockey=resolveCardJockey(sexMatch[2].trim());
+    const om=String(cells[8]||'').match(/(\d+(?:\.\d+)?)\s*\((\d{1,2})人気\)/);
+    const odds=om?Number(om[1]):null,pop=om?Number(om[2]):null;
+    rows.push({frame,num,name,jockey,trainer,pop,odds,rank:null,sexAge});
+    for(let base=10;base+3<cells.length;base+=6){
+      const dm=String(cells[base]||'').match(new RegExp(`^(20\\d{2})[./](\\d{1,2})[./](\\d{1,2})\\s+(${venues.join('|')})(\\d{1,2}|取|取消|除|除外|中|中止|失|失格)$`));
+      if(!dm)continue;
+      const date=`${dm[1]}/${String(dm[2]).padStart(2,'0')}/${String(dm[3]).padStart(2,'0')}`,status=dm[5];
+      const rank=/^\d+$/.test(status)?Number(status):null;
+      const raceName=String(cells[base+1]||'').trim();
+      const cm=String(cells[base+2]||'').match(/^(芝|ダ|障)(\d{3,4})(?:\((?:外|内)\))?\s+([0-9]+:[0-9]{2}(?:\.[0-9])?|[0-9]+(?:\.[0-9])?)?\s*(良|稍重|稍|重|不良|不)$/);
+      const fm=String(cells[base+3]||'').match(/^(\d+)頭\s+(\d+)番\s+(\d+)人\s+(.+?)\s+(\d{2,3}(?:\.\d)?)$/);
+      if(rank==null){
+        pastRuns.push({name,date,venue:dm[4],raceNo:null,raceName,className:raceName,surface:cm?.[1]||'',distance:cm?Number(cm[2]):null,time:cm?.[3]||'',going:normalizeGoingValue(cm?.[4]||''),rank:null,status,fieldSize:fm?Number(fm[1]):null,num:fm?Number(fm[2]):null,pop:fm?Number(fm[3]):null,jockey:fm?.[4]||'',burden:fm?Number(fm[5]):null,source:'pasted_horse_card'});
+      }else if(cm&&fm){
+        pastRuns.push({name,date,venue:dm[4],raceNo:null,raceName,className:raceName,surface:cm[1],distance:Number(cm[2]),time:cm[3]||'',going:normalizeGoingValue(cm[4]),rank,fieldSize:Number(fm[1]),num:Number(fm[2]),pop:Number(fm[3]),jockey:fm[4],burden:Number(fm[5]),source:'pasted_horse_card'});
+      }
+    }
+  }
+  return {rows:dedupe(rows,r=>`${r.num}|${r.name}`),pastRuns:dedupe(pastRuns,r=>`${r.name}|${r.date}|${r.venue}`)};
+}
+
 function parseResultRows(lines){
   const out=[];
   const boundary=lines.findIndex(s=>/^(?:払戻金|払戻し|コーナー通過順位)$/.test(String(s||'').trim()));
@@ -458,6 +498,8 @@ function parseAll(raw){
   if(!lines.length)return {error:'入力が空です'};
   const meta=parseMeta(lines),markdownRows=parseMarkdownResultRows(raw),resultRows=markdownRows.length>=3?markdownRows:parseResultRows(lines);
   if(resultRows.length>=3){const payouts=parsePayouts(raw,resultRows);return {meta,mode:'result',rows:resultRows,lines,pastRuns:[],payouts,debug:{result:resultRows.length,markdown:markdownRows.length,past:0,card:0,place:payouts.place.length,exacta:payouts.exacta.length,wide:payouts.wide.length}};}
+  const markdownCard=parseMarkdownPastCard(raw);
+  if(markdownCard.rows.length>=3)return {meta,mode:'card',rows:markdownCard.rows,lines,pastRuns:markdownCard.pastRuns,debug:{result:resultRows.length,markdown:markdownRows.length,past:markdownCard.rows.length,card:0,horsePast:markdownCard.pastRuns.length,markdownCard:true}};
   const pastRows=parsePastCard(lines);
   if(pastRows.length>=3){
     const pastRuns=extractHorsePastRuns(lines,pastRows);
@@ -1413,7 +1455,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.57 起動。騎手詳細で調教師コンビ別の騎乗数と成績を確認できます。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.58 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
