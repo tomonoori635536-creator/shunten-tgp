@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v463-20260905 -->
+<!-- deploy-refresh-v464-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.63：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.64：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1082,6 +1082,43 @@ function backtestRacePairs(){
   for(const c of (state.raceCards||[]))cards.set(backtestKey(c.meta),c);
   return [...(state.races||[])].sort((a,b)=>dateNumber(a.meta?.date)-dateNumber(b.meta?.date)||Number(a.meta?.raceNo||0)-Number(b.meta?.raceNo||0)).map(result=>({result,card:cards.get(backtestKey(result.meta))||null}));
 }
+function predictJockeyPopularityPair(cardRows,meta){
+  const target=dateNumber(meta?.date);
+  const hist=(state.races||[]).filter(r=>{const d=dateNumber(r.meta?.date);return d&&target&&d<target});
+  if(hist.length<5)return null;
+  const role1=new Map(),role2=new Map();
+  const add=(map,key,hit)=>{const x=map.get(key)||{n:0,h:0};x.n++;if(hit)x.h++;map.set(key,x)};
+  for(const race of hist)for(const r of race.rows||[]){
+    const pop=Number(r.pop),j=resolveCardJockey(r.jockey);
+    if(!j||!Number.isFinite(pop)||pop<1)continue;
+    const key=`${j}|${pop}`;
+    add(role1,key,Number(r.rank)===1);add(role2,key,Number(r.rank)===2);
+  }
+  let best=null;
+  for(const first of cardRows)for(const second of cardRows){
+    if(Number(first.num)===Number(second.num))continue;
+    const p1=Number(first.pop),p2=Number(second.pop);
+    const j1=resolveCardJockey(first.jockey),j2=resolveCardJockey(second.jockey);
+    if(!j1||!j2||!Number.isFinite(p1)||!Number.isFinite(p2))continue;
+    const a=role1.get(`${j1}|${p1}`)||{n:0,h:0},b=role2.get(`${j2}|${p2}`)||{n:0,h:0};
+    let pairOpp=0,pairHit=0,popOpp=0,popHit=0;
+    for(const race of hist){
+      const rr=(race.rows||[]).filter(x=>Number.isFinite(Number(x.rank)));
+      const x=rr.find(z=>resolveCardJockey(z.jockey)===j1&&Number(z.pop)===p1);
+      const y=rr.find(z=>Number(z.num)!==Number(x?.num)&&resolveCardJockey(z.jockey)===j2&&Number(z.pop)===p2);
+      if(x&&y){pairOpp++;if(Number(x.rank)===1&&Number(y.rank)===2)pairHit++}
+      const px=rr.find(z=>Number(z.pop)===p1),py=rr.find(z=>Number(z.num)!==Number(px?.num)&&Number(z.pop)===p2);
+      if(px&&py){popOpp++;if(Number(px.rank)===1&&Number(py.rank)===2)popHit++}
+    }
+    const firstRate=(a.h+0.5)/(a.n+5),secondRate=(b.h+0.5)/(b.n+5);
+    const pairRate=(pairHit+0.25)/(pairOpp+8),popRate=(popHit+0.5)/(popOpp+8);
+    const score=firstRate*0.35+secondRate*0.30+popRate*0.20+pairRate*0.15;
+    const cand={first,second,score,support:a.n+b.n+pairOpp+popOpp,firstN:a.n,firstHits:a.h,secondN:b.n,secondHits:b.h,pairOpp,pairHit,popOpp,popHit};
+    if(!best||cand.score>best.score||cand.score===best.score&&cand.support>best.support)best=cand;
+  }
+  return best;
+}
+
 function runChronologicalBacktest(){
   state=loadState();
   if(!Array.isArray(state.races))state.races=[];
@@ -1113,6 +1150,7 @@ function runChronologicalBacktest(){
   };
   const positionBucketKey=(adj)=>adj>=3?'p3':adj>=1?'p1':adj>-1?'mid':adj>-3?'m1':'m3';
   const details=[];
+  const jockeyPopPairStats={n:0,exactHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,supportSum:0};
   const popAdjustmentStats={applied:0,positive:0,negative:0,zero:0};
   const classAdjustmentStats={applied:0,positive:0,negative:0,zero:0};
   const comboAdjustmentStats={available:0,applied:0,positive:0,negative:0,zero:0};
@@ -1225,6 +1263,17 @@ function runChronologicalBacktest(){
       }
     }
     const rowDetail={date:meta.date||'',venue:meta.venue||'',raceNo:meta.raceNo||'',winnerNum:Number(winner.num),winnerName:winner.name||'',tops:{}};
+    const jpPair=predictJockeyPopularityPair(cardRows,meta);
+    if(jpPair){
+      const firstResult=resultByNum.get(Number(jpPair.first.num)),secondResult=resultByNum.get(Number(jpPair.second.num));
+      const exact=Number(firstResult?.rank)===1&&Number(secondResult?.rank)===2;
+      const top2=[Number(firstResult?.rank),Number(secondResult?.rank)].sort((a,b)=>a-b).join(',')==='1,2';
+      jockeyPopPairStats.n++;jockeyPopPairStats.supportSum+=jpPair.support;
+      if(exact)jockeyPopPairStats.exactHits++;if(top2)jockeyPopPairStats.top2Hits++;
+      const exactaEntries=result.payouts?.exacta||[];
+      if(exactaEntries.length){jockeyPopPairStats.roiN++;jockeyPopPairStats.stake+=100;if(exact)jockeyPopPairStats.returnYen+=pairPayout(exactaEntries,jpPair.first.num,jpPair.second.num,true)||0}
+      rowDetail.jockeyPopPair={firstNum:Number(jpPair.first.num),firstName:jpPair.first.name||'',firstJockey:jpPair.first.jockey||'',firstPop:Number(jpPair.first.pop),secondNum:Number(jpPair.second.num),secondName:jpPair.second.name||'',secondJockey:jpPair.second.jockey||'',secondPop:Number(jpPair.second.pop),exact,top2,support:jpPair.support};
+    }
     let anyEvaluated=false;
     for(const v of variants){
       const ranked=backtestRankRows(scored,v.score);
@@ -1269,7 +1318,7 @@ function runChronologicalBacktest(){
   highPayoutDiagnostics.sort((a,b)=>b.odds-a.odds||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   qToBRegressions.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   bRescuedWinners.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
-  return {variants,stats,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,popAdjustmentStats,classAdjustmentStats,comboAdjustmentStats,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
+  return {variants,stats,jockeyPopPairStats,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,popAdjustmentStats,classAdjustmentStats,comboAdjustmentStats,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
 }
 function renderBacktest(){
   const bt=runChronologicalBacktest();
@@ -1288,6 +1337,9 @@ function renderBacktest(){
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
   $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.55（人気別±8＋クラス±6＋調教師コンビ試験±4点）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 3鞍以上で補正${ts.applied}頭（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,supportSum:0};
+  const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
+  const jockeyPopPairHtml=`<h3>試験：騎手×人気 1着→2着ペア</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>順序どおり的中</th><th>1・2着両方的中</th><th>馬単1点回収率</th><th>平均過去データ</th></tr></thead><tbody><tr><td><b>JP 騎手×人気ペア（未採用）</b></td><td>${jps.n}</td><td>${backtestPct(jps.exactHits,jps.n)} <span class="muted">(${jps.exactHits}/${jps.n})</span></td><td>${backtestPct(jps.top2Hits,jps.n)} <span class="muted">(${jps.top2Hits}/${jps.n})</span></td><td>${jpRoi==null?'払戻データなし':`<b>${jpRoi.toFixed(1)}%</b><div class="muted">${jps.roiN}R / 投資${jps.stake.toLocaleString()}円 / 払戻${jps.returnYen.toLocaleString()}円</div>`}</td><td>${jps.n?(jps.supportSum/jps.n).toFixed(1):'-'}</td></tr></tbody></table></div><p class="muted">各レースより前だけを使用。1着側「騎手×人気」、2着側「騎手×人気」、人気順ペア、騎手ペアの実績から馬単を1点選びます。まだ正式な学習・実戦評価には反映しません。</p>`;
   const metrics=['top1Win','top1Place','winnerTop3','exactTop3'];
   const best={};
   for(const m of metrics){
@@ -1347,7 +1399,7 @@ function renderBacktest(){
     return `<tr><td><b>${esc(x.label)}</b></td><td>${x.n}</td><td>${signed(avgAdj)}</td><td>${backtestPct(x.wins,x.n)} <span class="muted">(${x.wins}/${x.n})</span></td><td>${backtestPct(x.places,x.n)} <span class="muted">(${x.places}/${x.n})</span></td><td>${roi==null?'-':roi.toFixed(1)+'%'}<div class="muted">ROI対象 ${x.oddsN}R / 投資${x.stake.toLocaleString()}円 / 払戻${x.ret.toLocaleString()}円</div></td><td>${avgOdds==null?'-':avgOdds.toFixed(2)+'倍'}</td></tr>`;
   };
   const positionDiag=`<h3>位置補正の強さ別診断（B 1位評価馬）</h3><div class="tablewrap"><table><thead><tr><th>位置補正帯</th><th>該当R</th><th>平均位置補正</th><th>1着率</th><th>3着内率</th><th>単勝回収率</th><th>平均選択単勝</th></tr></thead><tbody>${positionOrder.map(positionRow).join('')}</tbody></table></div><p class="muted">各レースでB（騎手適性＋並び）が1位評価した馬を、その馬の「位置補正」だけで5区分に分けた診断です。+3以上が本当に好成績か、位置補正が強すぎないかを確認します。境界は +3以上 / +1以上3未満 / -1より大きく+1未満 / -3より大きく-1以下 / -3以下 として重複なく集計します。重みは変更していません。</p>`;
-  $('backtestSummary').innerHTML=`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定複勝回収率</th><th>馬単表裏</th><th>ワイド1－2位</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${placeRoiCell(v)}${betCell(v,'exacta')}${betCell(v,'wide')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">複勝回収率は各方式の1位評価馬へ100円固定です。馬単表裏は評価1位・2位の2点、ワイドは評価1位－2位の1点です。保存済み全レースでは的中率を計算し、払戻保存済みレースでは回収率も計算します。単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${splitDiag}${qbDiag}${bqDiag}${highDiag}${positionDiag}`;
+  $('backtestSummary').innerHTML=jockeyPopPairHtml+`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定複勝回収率</th><th>馬単表裏</th><th>ワイド1－2位</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${placeRoiCell(v)}${betCell(v,'exacta')}${betCell(v,'wide')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">複勝回収率は各方式の1位評価馬へ100円固定です。馬単表裏は評価1位・2位の2点、ワイドは評価1位－2位の1点です。保存済み全レースでは的中率を計算し、払戻保存済みレースでは回収率も計算します。単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${splitDiag}${qbDiag}${bqDiag}${highDiag}${positionDiag}`;
   $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th>${bt.variants.map(v=>`<th>${esc(v.name)} 1位</th>`).join('')}</tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];if(!x)return '<td class="muted">--</td>';return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}<div class="muted">単勝 ${x.odds??'-'}</div></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -1487,7 +1539,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.63 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.64 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
