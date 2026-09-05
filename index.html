@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v466-20260905 -->
+<!-- deploy-refresh-v467-20260905 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.66：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.67：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1154,7 +1154,7 @@ function runChronologicalBacktest(){
   };
   const positionBucketKey=(adj)=>adj>=3?'p3':adj>=1?'p1':adj>-1?'mid':adj>-3?'m1':'m3';
   const details=[];
-  const jockeyPopPairStats={n:0,exactHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,supportSum:0};
+  const jockeyPopPairStats={n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const popAdjustmentStats={applied:0,positive:0,negative:0,zero:0};
   const classAdjustmentStats={applied:0,positive:0,negative:0,zero:0};
   const comboAdjustmentStats={available:0,applied:0,positive:0,negative:0,zero:0};
@@ -1271,11 +1271,16 @@ function runChronologicalBacktest(){
     if(jpPair){
       const firstResult=resultByNum.get(Number(jpPair.first.num)),secondResult=resultByNum.get(Number(jpPair.second.num));
       const exact=Number(firstResult?.rank)===1&&Number(secondResult?.rank)===2;
-      const top2=[Number(firstResult?.rank),Number(secondResult?.rank)].sort((a,b)=>a-b).join(',')==='1,2';
+      const reverse=Number(firstResult?.rank)===2&&Number(secondResult?.rank)===1;
+      const top2=exact||reverse;
       jockeyPopPairStats.n++;jockeyPopPairStats.supportSum+=jpPair.support;
-      if(exact)jockeyPopPairStats.exactHits++;if(top2)jockeyPopPairStats.top2Hits++;
+      if(exact)jockeyPopPairStats.exactHits++;if(reverse)jockeyPopPairStats.reverseHits++;if(top2)jockeyPopPairStats.top2Hits++;
       const exactaEntries=result.payouts?.exacta||[];
-      if(exactaEntries.length){jockeyPopPairStats.roiN++;jockeyPopPairStats.stake+=100;if(exact)jockeyPopPairStats.returnYen+=pairPayout(exactaEntries,jpPair.first.num,jpPair.second.num,true)||0}
+      if(exactaEntries.length){
+        jockeyPopPairStats.roiN++;jockeyPopPairStats.stake+=100;jockeyPopPairStats.reverseStake+=100;jockeyPopPairStats.boxStake+=200;
+        if(exact){const pay=pairPayout(exactaEntries,jpPair.first.num,jpPair.second.num,true)||0;jockeyPopPairStats.returnYen+=pay;jockeyPopPairStats.boxReturn+=pay}
+        if(reverse){const pay=pairPayout(exactaEntries,jpPair.second.num,jpPair.first.num,true)||0;jockeyPopPairStats.reverseReturn+=pay;jockeyPopPairStats.boxReturn+=pay}
+      }
       rowDetail.jockeyPopPair={firstNum:Number(jpPair.first.num),firstName:jpPair.first.name||'',firstJockey:jpPair.first.jockey||'',firstPop:Number(jpPair.first.pop),secondNum:Number(jpPair.second.num),secondName:jpPair.second.name||'',secondJockey:jpPair.second.jockey||'',secondPop:Number(jpPair.second.pop),exact,top2,support:jpPair.support};
     }
     let anyEvaluated=false;
@@ -1341,9 +1346,11 @@ function renderBacktest(){
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
   $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.55（人気別±8＋クラス±6＋調教師コンビ試験±4点）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 3鞍以上で補正${ts.applied}頭（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
-  const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,supportSum:0};
+  const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
-  const jockeyPopPairHtml=`<h3>試験：騎手×人気 1着→2着ペア</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>順序どおり的中</th><th>1・2着両方的中</th><th>馬単1点回収率</th><th>平均過去データ</th></tr></thead><tbody><tr><td><b>JP 騎手×人気ペア（未採用）</b></td><td>${jps.n}</td><td>${backtestPct(jps.exactHits,jps.n)} <span class="muted">(${jps.exactHits}/${jps.n})</span></td><td>${backtestPct(jps.top2Hits,jps.n)} <span class="muted">(${jps.top2Hits}/${jps.n})</span></td><td>${jpRoi==null?'払戻データなし':`<b>${jpRoi.toFixed(1)}%</b><div class="muted">${jps.roiN}R / 投資${jps.stake.toLocaleString()}円 / 払戻${jps.returnYen.toLocaleString()}円</div>`}</td><td>${jps.n?(jps.supportSum/jps.n).toFixed(1):'-'}</td></tr></tbody></table></div><p class="muted">各レースより前だけを使用。1着側「騎手×人気」、2着側「騎手×人気」、人気順ペア、騎手ペアの実績から馬単を1点選びます。まだ正式な学習・実戦評価には反映しません。</p>`;
+  const jpReverseRoi=jps.reverseStake?100*jps.reverseReturn/jps.reverseStake:null;
+  const jpBoxRoi=jps.boxStake?100*jps.boxReturn/jps.boxStake:null;
+  const jockeyPopPairHtml=`<h3>試験：騎手×人気 1着→2着ペア</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>順序どおり的中</th><th>逆順的中</th><th>1・2着両方的中</th><th>順方向1点ROI</th><th>逆方向1点ROI</th><th>表裏2点ROI</th><th>平均過去データ</th></tr></thead><tbody><tr><td><b>JP 騎手×人気ペア（未採用）</b></td><td>${jps.n}</td><td>${backtestPct(jps.exactHits,jps.n)} <span class="muted">(${jps.exactHits}/${jps.n})</span></td><td>${backtestPct(jps.reverseHits,jps.n)} <span class="muted">(${jps.reverseHits}/${jps.n})</span></td><td>${backtestPct(jps.top2Hits,jps.n)} <span class="muted">(${jps.top2Hits}/${jps.n})</span></td><td>${jpRoi==null?'払戻データなし':`<b>${jpRoi.toFixed(1)}%</b><div class="muted">${jps.roiN}R / 投資${jps.stake.toLocaleString()}円 / 払戻${jps.returnYen.toLocaleString()}円</div>`}</td><td>${jpReverseRoi==null?'払戻データなし':`<b>${jpReverseRoi.toFixed(1)}%</b><div class="muted">投資${jps.reverseStake.toLocaleString()}円 / 払戻${jps.reverseReturn.toLocaleString()}円</div>`}</td><td>${jpBoxRoi==null?'払戻データなし':`<b>${jpBoxRoi.toFixed(1)}%</b><div class="muted">投資${jps.boxStake.toLocaleString()}円 / 払戻${jps.boxReturn.toLocaleString()}円</div>`}</td><td>${jps.n?(jps.supportSum/jps.n).toFixed(1):'-'}</td></tr></tbody></table></div><p class="muted">各レースより前だけを使用。1着側「騎手×人気」、2着側「騎手×人気」、人気順ペア、騎手ペアの実績から馬単を1点選びます。まだ正式な学習・実戦評価には反映しません。</p>`;
   const metrics=['top1Win','top1Place','winnerTop3','exactTop3'];
   const best={};
   for(const m of metrics){
@@ -1543,7 +1550,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.66 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.67 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
