@@ -1215,7 +1215,7 @@ function runChronologicalBacktest(){
       const horse=Number.isFinite(Number(h.score))?Number(h.score):null;
       const jockey=Number.isFinite(Number(scoreB))?Number(scoreB):null;
       const blend=(hw)=>horse==null||jockey==null?null:clampValue(horse*hw+jockey*(1-hw),0,100);
-      const scoreBNoCombo=scoreB==null?null:clampValue(scoreB-(Number(q.comboAdj)||0),0,100);
+      const scoreBNoCombo=scoreB==null?null:clampValue(Number(q.score)-(Number(q.comboAdj)||0)+lineupAdj,0,100);
       return {row,scoreA,scoreP,scoreQ,scoreB,scoreBNoCombo,scoreC,scoreD,scoreBQ,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,lineupDetail,comboAdj:Number(q.comboAdj)||0,
         scoreM50:blend(0.50),scoreM55:blend(0.55),scoreM60:blend(0.60),scoreM70:blend(0.70),scoreM80:blend(0.80)};
     });
