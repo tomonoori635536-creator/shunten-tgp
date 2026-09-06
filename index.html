@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v474-20260906 -->
+<!-- deploy-refresh-v475-20260906 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.74：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.75：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1176,6 +1176,11 @@ function runChronologicalBacktest(){
     withoutCombo:{n:0,hits:0,place:0,roiN:0,stake:0,returnYen:0},
     switches:0,helped:0,harmed:0
   };
+  const classAB={
+    withClass:{n:0,hits:0,place:0,roiN:0,stake:0,returnYen:0},
+    withoutClass:{n:0,hits:0,place:0,roiN:0,stake:0,returnYen:0},
+    switches:0,helped:0,harmed:0
+  };
   const highPayoutDiagnostics=[];
   const qToBRegressions=[];
   const bRescuedWinners=[];
@@ -1216,7 +1221,8 @@ function runChronologicalBacktest(){
       const jockey=Number.isFinite(Number(scoreB))?Number(scoreB):null;
       const blend=(hw)=>horse==null||jockey==null?null:clampValue(horse*hw+jockey*(1-hw),0,100);
       const scoreBNoCombo=scoreB==null?null:clampValue(Number(q.score)-(Number(q.comboAdj)||0)+lineupAdj,0,100);
-      return {row,scoreA,scoreP,scoreQ,scoreB,scoreBNoCombo,scoreC,scoreD,scoreBQ,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,lineupDetail,comboAdj:Number(q.comboAdj)||0,
+      const scoreBNoClass=scoreB==null?null:clampValue(Number(q.score)-(Number(q.classAdj)||0)+lineupAdj,0,100);
+      return {row,scoreA,scoreP,scoreQ,scoreB,scoreBNoCombo,scoreBNoClass,scoreC,scoreD,scoreBQ,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,lineupDetail,comboAdj:Number(q.comboAdj)||0,
         scoreM50:blend(0.50),scoreM55:blend(0.55),scoreM60:blend(0.60),scoreM70:blend(0.70),scoreM80:blend(0.80)};
     });
     const withTop=backtestRankRows(scored,'scoreB')[0];
@@ -1230,6 +1236,18 @@ function runChronologicalBacktest(){
       const wo=Number(wr?.odds);if(Number.isFinite(wo)&&wo>0){comboAB.withCombo.roiN++;comboAB.withCombo.stake+=100;if(withHit)comboAB.withCombo.returnYen+=Math.round(wo*100);}
       const no=Number(nr?.odds);if(Number.isFinite(no)&&no>0){comboAB.withoutCombo.roiN++;comboAB.withoutCombo.stake+=100;if(withoutHit)comboAB.withoutCombo.returnYen+=Math.round(no*100);}
       if(Number(withTop.row.num)!==Number(withoutTop.row.num)){comboAB.switches++;if(withHit&&!withoutHit)comboAB.helped++;if(!withHit&&withoutHit)comboAB.harmed++;}
+    }
+    const classWithTop=backtestRankRows(scored,'scoreB')[0];
+    const classWithoutTop=backtestRankRows(scored,'scoreBNoClass')[0];
+    if(classWithTop&&classWithoutTop){
+      classAB.withClass.n++;classAB.withoutClass.n++;
+      const wr=resultByNum.get(Number(classWithTop.row.num)),nr=resultByNum.get(Number(classWithoutTop.row.num));
+      const withHit=Number(wr?.rank)===1,withoutHit=Number(nr?.rank)===1;
+      if(withHit)classAB.withClass.hits++;if(Number(wr?.rank)<=3)classAB.withClass.place++;
+      if(withoutHit)classAB.withoutClass.hits++;if(Number(nr?.rank)<=3)classAB.withoutClass.place++;
+      const wo=Number(wr?.odds);if(Number.isFinite(wo)&&wo>0){classAB.withClass.roiN++;classAB.withClass.stake+=100;if(withHit)classAB.withClass.returnYen+=Math.round(wo*100);}
+      const no=Number(nr?.odds);if(Number.isFinite(no)&&no>0){classAB.withoutClass.roiN++;classAB.withoutClass.stake+=100;if(withoutHit)classAB.withoutClass.returnYen+=Math.round(no*100);}
+      if(Number(classWithTop.row.num)!==Number(classWithoutTop.row.num)){classAB.switches++;if(withHit&&!withoutHit)classAB.helped++;if(!withHit&&withoutHit)classAB.harmed++;}
     }
     const actualTop3=new Set(resultRows.filter(x=>Number(x.rank)>=1&&Number(x.rank)<=3).map(x=>Number(x.num)));
     const bRankedForPosition=backtestRankRows(scored,'scoreB');
@@ -1432,7 +1450,7 @@ function runChronologicalBacktest(){
   highPayoutDiagnostics.sort((a,b)=>b.odds-a.odds||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   qToBRegressions.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   bRescuedWinners.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
-  return {variants,stats,jockeyPopPairStats,hybridPairBands,secondPlaceTests,secondPlaceValidation,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,popAdjustmentStats,classAdjustmentStats,comboAdjustmentStats,comboAB,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
+  return {variants,stats,jockeyPopPairStats,hybridPairBands,secondPlaceTests,secondPlaceValidation,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,popAdjustmentStats,classAdjustmentStats,comboAdjustmentStats,comboAB,classAB,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
 }
 function renderBacktest(){
   const bt=runChronologicalBacktest();
@@ -1450,7 +1468,7 @@ function renderBacktest(){
   const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.74（人気別±8＋クラス±6＋調教師コンビ段階補正）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.75（人気別±8＋クラス±6＋調教師コンビ段階補正）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
   const jpReverseRoi=jps.reverseStake?100*jps.reverseReturn/jps.reverseStake:null;
@@ -1461,6 +1479,8 @@ function renderBacktest(){
     return `<tr><td><b>${label}</b></td><td>${x.n||0}</td><td>${backtestPct(x.hits||0,x.n||0)} <span class="muted">(${x.hits||0}/${x.n||0})</span></td><td>${backtestPct(x.place||0,x.n||0)} <span class="muted">(${x.place||0}/${x.n||0})</span></td><td>${roi==null?'払戻データなし':`<b>${roi.toFixed(1)}%</b><div class="muted">${x.roiN||0}R / 投資${(x.stake||0).toLocaleString()}円 / 払戻${(x.returnYen||0).toLocaleString()}円</div>`}</td></tr>`;
   };
   const comboABHtml=`<h3>検証：調教師コンビ補正 あり／なし</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>単勝ROI</th></tr></thead><tbody>${comboABRow('段階補正あり（現在）',cab.withCombo||{})}${comboABRow('補正なし',cab.withoutCombo||{})}</tbody></table></div><p class="muted">同じB方式から調教師コンビ点だけを外して比較します。1位が変わった ${cab.switches||0}R / 補正で的中へ改善 ${cab.helped||0}R / 補正で的中を失った ${cab.harmed||0}R。未来データは使用しません。</p>`;
+  const clab=bt.classAB||{withClass:{},withoutClass:{},switches:0,helped:0,harmed:0};
+  const classABHtml=`<h3>検証：クラス補正 あり／なし</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>単勝ROI</th></tr></thead><tbody>${comboABRow('クラス補正あり（現在）',clab.withClass||{})}${comboABRow('クラス補正なし',clab.withoutClass||{})}</tbody></table></div><p class="muted">同じB方式からクラス点だけを外して比較します。1位が変わった ${clab.switches||0}R / 補正で的中へ改善 ${clab.helped||0}R / 補正で的中を失った ${clab.harmed||0}R。未来データは使用しません。</p>`;
   const jockeyPopPairHtml=`<h3>試験：騎手×人気 1着→2着ペア</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>順序どおり的中</th><th>逆順的中</th><th>1・2着両方的中</th><th>順方向1点ROI</th><th>最高配当1件除外ROI</th><th>逆方向1点ROI</th><th>表裏2点ROI</th><th>平均過去データ</th></tr></thead><tbody><tr><td><b>JP 騎手×人気ペア（未採用）</b></td><td>${jps.n}</td><td>${backtestPct(jps.exactHits,jps.n)} <span class="muted">(${jps.exactHits}/${jps.n})</span></td><td>${backtestPct(jps.reverseHits,jps.n)} <span class="muted">(${jps.reverseHits}/${jps.n})</span></td><td>${backtestPct(jps.top2Hits,jps.n)} <span class="muted">(${jps.top2Hits}/${jps.n})</span></td><td>${jpRoi==null?'払戻データなし':`<b>${jpRoi.toFixed(1)}%</b><div class="muted">${jps.roiN}R / 投資${jps.stake.toLocaleString()}円 / 払戻${jps.returnYen.toLocaleString()}円</div>`}</td><td>${jpReverseRoi==null?'払戻データなし':`<b>${jpReverseRoi.toFixed(1)}%</b><div class="muted">投資${jps.reverseStake.toLocaleString()}円 / 払戻${jps.reverseReturn.toLocaleString()}円</div>`}</td><td>${jpBoxRoi==null?'払戻データなし':`<b>${jpBoxRoi.toFixed(1)}%</b><div class="muted">投資${jps.boxStake.toLocaleString()}円 / 払戻${jps.boxReturn.toLocaleString()}円</div>`}</td><td>${jps.n?(jps.supportSum/jps.n).toFixed(1):'-'}</td></tr></tbody></table></div><p class="muted">各レースより前だけを使用。1着側「騎手×人気」、2着側「騎手×人気」、人気順ペア、騎手ペアの実績から馬単を1点選びます。まだ正式な学習・実戦評価には反映しません。</p>`;
   const hybridPairHtml=`<h3>試験：H＋B上位3頭 → JP着順決定</h3><div class="tablewrap"><table><thead><tr><th>購入条件</th><th>対象R</th><th>順方向的中</th><th>逆方向的中</th><th>1・2着両方</th><th>順方向1点ROI</th><th>表裏2点ROI</th></tr></thead><tbody>${(bt.hybridPairBands||[]).map(x=>`<tr><td><b>${esc(x.label)}</b></td><td>${x.n}</td><td>${backtestPct(x.exactHits,x.n)} <span class="muted">(${x.exactHits}/${x.n})</span></td><td>${backtestPct(x.reverseHits,x.n)} <span class="muted">(${x.reverseHits}/${x.n})</span></td><td>${backtestPct(x.top2Hits,x.n)} <span class="muted">(${x.top2Hits}/${x.n})</span></td><td>${x.stake?`<b>${(100*x.returnYen/x.stake).toFixed(1)}%</b><div class="muted">${x.roiN}R / 投資${x.stake.toLocaleString()}円 / 払戻${x.returnYen.toLocaleString()}円</div>`:'払戻データなし'}</td><td>${x.boxStake?`<b>${(100*x.boxReturn/x.boxStake).toFixed(1)}%</b><div class="muted">投資${x.boxStake.toLocaleString()}円 / 払戻${x.boxReturn.toLocaleString()}円</div>`:'払戻データなし'}</td></tr>`).join('')}</tbody></table></div><p class="muted">馬能力Hと騎手評価Bの平均上位3頭だけを候補にし、JPは1着・2着の順序決定に限定します。信頼度は1位ペアと2位ペアの点差です。すべて試験中で通常評価には未反映です。</p>`;
   const secondPlaceHtml=`<h3>試験：1着軸固定 → 2着専用評価</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>条件</th><th>対象R</th><th>順方向的中</th><th>逆方向的中</th><th>順方向1点ROI</th><th>逆方向1点ROI</th></tr></thead><tbody>${(bt.secondPlaceTests||[]).map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.filter)}</td><td>${x.n}</td><td>${backtestPct(x.exactHits,x.n)} <span class="muted">(${x.exactHits}/${x.n})</span></td><td>${backtestPct(x.reverseHits,x.n)} <span class="muted">(${x.reverseHits}/${x.n})</span></td><td>${x.stake?`<b>${(100*x.ret/x.stake).toFixed(1)}%</b><div class="muted">${x.roiN}R / 投資${x.stake.toLocaleString()}円 / 払戻${x.ret.toLocaleString()}円</div>`:'払戻データなし'}</td><td>${x.maxRemovedStake?`<b>${(100*x.maxRemovedRet/x.maxRemovedStake).toFixed(1)}%</b><div class="muted">最高払戻 ${x.maxPay.toLocaleString()}円を除外</div>`:'-'}</td><td>${x.stake?`<b>${(100*x.reverseRet/x.stake).toFixed(1)}%</b><div class="muted">投資${x.stake.toLocaleString()}円 / 払戻${x.reverseRet.toLocaleString()}円</div>`:'払戻データなし'}</td></tr>`).join('')}</tbody></table></div><p class="muted">1着は馬能力Hと騎手Bの平均1位で固定。E1はB次点、E2は騎手×人気の過去2着率、E3は馬の2・3着率と騎手×人気2着率を合成します。未採用の時系列試験です。</p>`;
@@ -1524,7 +1544,7 @@ function renderBacktest(){
     return `<tr><td><b>${esc(x.label)}</b></td><td>${x.n}</td><td>${signed(avgAdj)}</td><td>${backtestPct(x.wins,x.n)} <span class="muted">(${x.wins}/${x.n})</span></td><td>${backtestPct(x.places,x.n)} <span class="muted">(${x.places}/${x.n})</span></td><td>${roi==null?'-':roi.toFixed(1)+'%'}<div class="muted">ROI対象 ${x.oddsN}R / 投資${x.stake.toLocaleString()}円 / 払戻${x.ret.toLocaleString()}円</div></td><td>${avgOdds==null?'-':avgOdds.toFixed(2)+'倍'}</td></tr>`;
   };
   const positionDiag=`<h3>位置補正の強さ別診断（B 1位評価馬）</h3><div class="tablewrap"><table><thead><tr><th>位置補正帯</th><th>該当R</th><th>平均位置補正</th><th>1着率</th><th>3着内率</th><th>単勝回収率</th><th>平均選択単勝</th></tr></thead><tbody>${positionOrder.map(positionRow).join('')}</tbody></table></div><p class="muted">各レースでB（騎手適性＋並び）が1位評価した馬を、その馬の「位置補正」だけで5区分に分けた診断です。+3以上が本当に好成績か、位置補正が強すぎないかを確認します。境界は +3以上 / +1以上3未満 / -1より大きく+1未満 / -3より大きく-1以下 / -3以下 として重複なく集計します。重みは変更していません。</p>`;
-  $('backtestSummary').innerHTML=comboABHtml+jockeyPopPairHtml+hybridPairHtml+secondPlaceHtml+secondValidationHtml+`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定複勝回収率</th><th>馬単表裏</th><th>ワイド1－2位</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${placeRoiCell(v)}${betCell(v,'exacta')}${betCell(v,'wide')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">複勝回収率は各方式の1位評価馬へ100円固定です。馬単表裏は評価1位・2位の2点、ワイドは評価1位－2位の1点です。保存済み全レースでは的中率を計算し、払戻保存済みレースでは回収率も計算します。単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${splitDiag}${qbDiag}${bqDiag}${highDiag}${positionDiag}`;
+  $('backtestSummary').innerHTML=classABHtml+comboABHtml+jockeyPopPairHtml+hybridPairHtml+secondPlaceHtml+secondValidationHtml+`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定複勝回収率</th><th>馬単表裏</th><th>ワイド1－2位</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${placeRoiCell(v)}${betCell(v,'exacta')}${betCell(v,'wide')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">複勝回収率は各方式の1位評価馬へ100円固定です。馬単表裏は評価1位・2位の2点、ワイドは評価1位－2位の1点です。保存済み全レースでは的中率を計算し、払戻保存済みレースでは回収率も計算します。単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${splitDiag}${qbDiag}${bqDiag}${highDiag}${positionDiag}`;
   $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th>${bt.variants.map(v=>`<th>${esc(v.name)} 1位</th>`).join('')}</tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];if(!x)return '<td class="muted">--</td>';return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}<div class="muted">単勝 ${x.odds??'-'}</div></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
