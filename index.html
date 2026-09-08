@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v483-20260906 -->
+<!-- deploy-refresh-v484-20260908 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.83：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.84：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -201,7 +201,7 @@ function parseMeta(lines){
   const head=headerWindow(lines),joined=head.join(' '),hi=head.findIndex(x=>/発走/.test(x));
   const sd=joined.match(/(?:^|\s)(芝|ダ|障)\s*(\d{3,4})m/);
   const meeting=joined.match(new RegExp(`(?:^|\\s)(\\d+)回\\s*(${venues.join('|')})\\s*(\\d+)日目`));
-  const going=(joined.match(/(?:馬場|馬場状態)[:：]?\s*(良|稍重|重|不良|稍|不)/)||[])[1]||'';
+  const going=normalizeGoingValue((joined.match(/(?:馬場|馬場状態)[:：]?\s*(良|稍重|重|不良|稍|不)/)||[])[1]||'');
   let raceName='';if(hi>0){for(let i=hi-1;i>=Math.max(0,hi-4);i--){const s=head[i];if(!/^\d{1,2}R$/.test(s)&&!/^(前|次|本日へ)$/.test(s)){raceName=s;break}}}
   return {date:parseDate(lines),venue:parseVenue(lines),raceNo:parseRaceNo(lines),meetingNo:meeting?Number(meeting[1]):null,meetingDay:meeting?Number(meeting[3]):null,surface:sd?sd[1]:'',distance:sd?Number(sd[2]):null,going,raceName};
 }
@@ -743,53 +743,51 @@ function jockeySuitability(row,meta){
   const all=jockeyHistoryBefore(row.jockey,meta?.date);
   if(!all.length)return empty('未学習');
   const course=(meta?.surface||meta?.distance)?`${meta?.surface||'?'}${meta?.distance||'?'}m`:'';
-  const exactPop=exactPopularity(row.pop);
+  const exactPop=exactPopularity(row.pop),targetGoing=normalizeGoingValue(meta?.going);
   const factors=[
     {label:'競馬場',value:meta?.venue||'',weight:30,test:r=>(r.venue||'')===(meta?.venue||'')},
     {label:'コース',value:course,weight:30,test:r=>((r.surface||r.distance)?`${r.surface||'?'}${r.distance||'?'}m`:'')===course},
-    {label:'馬場',value:meta?.going||'',weight:15,test:r=>(r.going||'')===(meta?.going||'')},
+    {label:'馬場',value:targetGoing,weight:15,test:r=>normalizeGoingValue(r.going)===targetGoing},
     {label:'総合',value:'',weight:25,test:()=>true}
   ];
-  let weighted=0,weightSum=0;const matched=new Set();const reasons=[];
+  let weighted=0,weightSum=0;const matched=new Set(),reasons=[];
   for(const f of factors){
-    if(f.label!=='総合'&&!f.value)continue;
-    const rows=f.label==='総合'?all:all.filter(f.test);if(!rows.length)continue;
+    if(f.label!=='総合'&&!f.value){reasons.push(`${f.label} 不明・補正なし`);continue;}
+    const rows=f.label==='総合'?all:all.filter(f.test);
+    if(!rows.length){
+      if(f.label==='馬場'){weighted+=50*f.weight;weightSum+=f.weight;reasons.push(`馬場 ${f.value} データなし・中立50点`);}
+      else if(f.label!=='総合')reasons.push(`${f.label} ${f.value} データなし`);
+      continue;
+    }
     const q=scoreRows(rows);if(!q)continue;
-    weighted+=q.score*f.weight;weightSum+=f.weight;
-    if(f.label!=='総合'){rows.forEach(x=>matched.add(x));reasons.push(`${f.value} ${rows.length}鞍`)}
+    weighted+=q.score*f.weight;weightSum+=f.weight;rows.forEach(x=>matched.add(x));
+    reasons.push(`${f.label}${f.value?` ${f.value}`:''} ${rows.length}鞍・${q.score.toFixed(1)}点`);
   }
   if(!weightSum)return empty('未学習',all.length);
   let popAdj=0,popN=0;
   if(exactPop){
-    const popRows=all.filter(r=>exactPopularity(r.pop)===exactPop);
-    const popScore=scoreRows(popRows);
-    if(popScore){popN=popRows.length;popAdj=clampValue((popScore.score-50)*0.40,-8,8);reasons.push(`${exactPop}成績 ${popN}鞍・補正${popAdj>=0?'+':''}${popAdj.toFixed(1)}`);popRows.forEach(x=>matched.add(x));}
-  }
-  let classAdj=0,classN=0;
-  const cls=horseClassKey(meta);
+    const popRows=all.filter(r=>exactPopularity(r.pop)===exactPop),popScore=scoreRows(popRows);
+    if(popScore){popN=popRows.length;popAdj=clampValue((popScore.score-50)*0.40,-8,8);reasons.push(`${exactPop}番人気成績 ${popN}鞍・補正${popAdj>=0?'+':''}${popAdj.toFixed(1)}`);popRows.forEach(x=>matched.add(x));}
+    else reasons.push(`${exactPop}番人気成績 データなし・補正0`);
+  }else reasons.push('今回人気なし・人気補正0');
+  let classAdj=0,classN=0;const cls=horseClassKey(meta);
   if(cls){
-    const classRows=all.filter(r=>horseClassKey(r)===cls);
-    const classScore=scoreRows(classRows);
+    const classRows=all.filter(r=>horseClassKey(r)===cls),classScore=scoreRows(classRows);
     if(classScore){classN=classRows.length;classAdj=clampValue((classScore.score-50)*0.30,-6,6);reasons.push(`クラス${cls} ${classN}鞍・補正${classAdj>=0?'+':''}${classAdj.toFixed(1)}`);classRows.forEach(x=>matched.add(x));}
-  }
-  let comboAdj=0,comboN=0;
-  const trainer=String(row?.trainer||'').trim();
+    else reasons.push(`クラス${cls} データなし・補正0`);
+  }else reasons.push('今回クラス不明・クラス補正0');
+  let comboAdj=0,comboN=0;const trainer=String(row?.trainer||'').trim();
   if(trainer){
-    const comboRows=all.filter(r=>String(r.trainer||'').trim()===trainer);
-    comboN=comboRows.length;
+    const comboRows=all.filter(r=>String(r.trainer||'').trim()===trainer);comboN=comboRows.length;
     const comboCap=comboN>=20?6:comboN>=10?4:comboN>=5?2:0;
-    if(comboCap>0){
-      const comboScore=scoreRows(comboRows);
-      if(comboScore){comboAdj=clampValue((comboScore.score-50)*0.25,-comboCap,comboCap);reasons.push(`${trainer}厩舎コンビ ${comboN}鞍・上限±${comboCap}・補正${comboAdj>=0?'+':''}${comboAdj.toFixed(1)}`);comboRows.forEach(x=>matched.add(x));}
-    }else if(comboN>0){
-      reasons.push(`${trainer}厩舎コンビ ${comboN}鞍・5鞍未満で表示のみ`);
-    }
+    if(comboCap>0){const comboScore=scoreRows(comboRows);if(comboScore){comboAdj=clampValue((comboScore.score-50)*0.25,-comboCap,comboCap);reasons.push(`${trainer}厩舎コンビ ${comboN}鞍・上限±${comboCap}・補正${comboAdj>=0?'+':''}${comboAdj.toFixed(1)}`);comboRows.forEach(x=>matched.add(x));}}
+    else if(comboN>0)reasons.push(`${trainer}厩舎コンビ ${comboN}鞍・5鞍未満で表示のみ`);
   }
-  const score=clampValue(weighted/weightSum+popAdj+classAdj+comboAdj,0,100);
-  const matchCount=matched.size;
+  let score=clampValue(weighted/weightSum+popAdj+classAdj+comboAdj,0,100);const matchCount=matched.size;
+  if(all.length<3&&score>65){score=65;reasons.push('少数データ上限65点');}
+  else if((all.length<6||matchCount<4)&&score>75){score=75;reasons.push('少数データ上限75点');}
   let label='蓄積あり';
-  if(all.length<3||matchCount<2)label='サンプル少';
-  else if(all.length<10||matchCount<5)label='参考';
+  if(all.length<3||matchCount<2)label='サンプル少';else if(all.length<10||matchCount<5)label='参考';
   return {score,label,matchCount,total:all.length,reasons,popAdj,popN,classAdj,classN,comboAdj,comboN};
 }
 function clampValue(v,min,max){return Math.max(min,Math.min(max,v))}
@@ -1061,7 +1059,8 @@ function horseAbility(row,meta,sourceRuns=null){
   const targetGoing=normalizeGoingValue(meta?.going);
   const goingRows=targetGoing?all.filter(r=>normalizeGoingValue(r.going)===targetGoing):[];
   const goingScore=horseAverageScore(goingRows,3);
-  if(Number.isFinite(goingScore))factors.push({label:targetGoing,weight:15,score:goingScore,n:goingRows.length});
+  if(Number.isFinite(goingScore))factors.push({label:`馬場${targetGoing}`,weight:15,score:goingScore,n:goingRows.length});
+  else if(targetGoing)factors.push({label:`馬場${targetGoing}`,weight:15,score:50,n:0,note:'データなし・中立'});
   const cls=horseClassKey(meta);
   const classRows=cls?all.filter(r=>horseClassKey(r)===cls):[];
   const classScore=horseAverageScore(classRows,3);
@@ -1072,7 +1071,7 @@ function horseAbility(row,meta,sourceRuns=null){
   let label='蓄積あり';
   if(all.length<2)label='サンプル少';
   else if(all.length<5)label='参考';
-  return {score:clampValue(score,0,100),label,total:all.length,reasons:factors.map(x=>`${x.label} ${x.n}走`),factors};
+  return {score:clampValue(score,0,100),label,total:all.length,reasons:factors.map(x=>x.note?`${x.label} データなし・中立50点`:`${x.label} ${x.n}走・${x.score.toFixed(1)}点`),factors};
 }
 function backtestKey(meta){return [meta?.date||'',meta?.venue||'',Number(meta?.raceNo)||''].join('|')}
 function backtestPct(n,d){return d?`${(100*n/d).toFixed(1)}%`:'0.0%'}
@@ -1620,7 +1619,7 @@ function renderBacktest(){
   const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.83（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.84（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
   const jpReverseRoi=jps.reverseStake?100*jps.reverseReturn/jps.reverseStake:null;
@@ -1723,7 +1722,7 @@ function renderPreview(p){
   if(!p.rows?.length){html+=`<p class="warn">馬データを認識できませんでした。</p>`;$('preview').innerHTML=html;return}
   if(p.mode==='card'){
     html+=`<p class="muted">馬能力は直近3走40%・同コース距離25%・同馬場15%・クラス20%の土台で、対象日より前の馬成績だけから計算します。該当データがない項目は残りの項目へ再配分します。騎手は適性＋並び補正を採用し、当日R・クラス別・直前騎乗→次騎乗は参考表示・学習継続です。馬能力と騎手の合成はバックテスト上の仮比較だけで、実戦表示の最終点にはまだ採用しません。</p>`;
-    html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>今回馬柱</th><th>馬能力</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>クラス参考</th><th>並び補正</th><th>当日R参考</th><th>直前騎乗参考</th><th>最終騎手</th><th>信頼度</th><th>当日パターン</th><th>並び学習</th><th>今回の一致データ</th></tr></thead><tbody>`;
+    html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>今回馬柱</th><th>馬能力</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>クラス参考</th><th>並び補正</th><th>当日R参考</th><th>直前騎乗参考</th><th>最終騎手</th><th>信頼度</th><th>当日パターン</th><th>並び学習</th><th>騎手点内訳</th></tr></thead><tbody>`;
     html+=p.rows.map(r=>{
       const q=jockeySuitability(r,m);
       const lp=jockeyLineupPattern(r,m,p.rows);
