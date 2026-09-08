@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v487 -->
+<!-- deploy-refresh-v488 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.87：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.88：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1696,7 +1696,7 @@ function renderBacktest(){
   const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.87（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.88（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
   const jpReverseRoi=jps.reverseStake?100*jps.reverseReturn/jps.reverseStake:null;
@@ -1947,52 +1947,86 @@ function bindDailyRideCount(name){
 function avgRankText(x){return x.rides?(x.rankSum/x.rides).toFixed(2):'-'}
 function patternTable(title,entries,label){const rows=entries.sort((a,b)=>b[1].rides-a[1].rides).map(([k,x])=>`<tr><td>${esc(k)}</td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${avgRankText(x)}</td></tr>`).join('');return `<div class="patternCard"><h4>${title}</h4><div class="tablewrap"><table><tr><th>${label}</th><th>騎乗</th><th>1着</th><th>勝率</th><th>3着内</th><th>複勝率</th><th>平均着順</th></tr>${rows||'<tr><td colspan="7">データなし</td></tr>'}</table></div></div>`}
 
-function jockeyTrainerPopularityRows(history,name,filters={}){
-  const groups=new Map();let total=0,missing=0;
-  const day=v=>String(v||'').replace(/\//g,'-').slice(0,10);
+
+function jockeyCrossDimensions(){
+  const integer=(v,suffix='')=>v!=null&&v!==''&&Number.isInteger(Number(v))&&Number(v)>0?String(Number(v))+suffix:'不明';
+  return [
+    {key:'trainer',label:'調教師',value:r=>String(r.trainer||'').trim()||'不明'},
+    {key:'pop',label:'人気',value:r=>integer(r.pop,'番人気')},
+    {key:'going',label:'馬場',value:r=>normalizeGoingValue(r.going)||'不明'},
+    {key:'class',label:'クラス',value:r=>horseClassKey(r)||'不明'},
+    {key:'venue',label:'競馬場',value:r=>String(r.venue||'').trim()||'不明'},
+    {key:'course',label:'コース・距離',value:r=>r.surface&&Number(r.distance)>0?String(r.surface)+Number(r.distance)+'m':'不明'},
+    {key:'meetingDay',label:'開催日目',value:r=>integer(r.meetingDay,'日目')},
+    {key:'raceNo',label:'R',value:r=>integer(r.raceNo,'R')}
+  ];
+}
+function jockeyCrossRows(history,name,options={}){
+  const dimensions=jockeyCrossDimensions(),keys=options.keys||dimensions.map(d=>d.key);
+  const selected=dimensions.filter(d=>keys.includes(d.key)),groups=new Map();
+  let total=0,unknown=0,excluded=0;
   for(const r of history||[]){
     if(r.jockey!==name||r.rank==null||r.rank==='')continue;
     const rank=Number(r.rank);if(!Number.isInteger(rank)||rank<1)continue;
-    const date=day(r.date);
-    if(filters.from&&(!date||date<filters.from))continue;
-    if(filters.to&&(!date||date>filters.to))continue;
+    const date=String(r.date||'').replace(/\//g,'-').slice(0,10);
+    if(options.from&&(!date||date<options.from))continue;
+    if(options.to&&(!date||date>options.to))continue;
+    const values=Object.fromEntries(dimensions.map(d=>[d.key,d.value(r)]));
+    if(dimensions.some(d=>options.filters?.[d.key]&&values[d.key]!==options.filters[d.key]))continue;
     total++;
-    const trainer=String(r.trainer||'').trim(),pop=Number(r.pop);
-    if(!trainer||r.pop==null||r.pop===''||!Number.isInteger(pop)||pop<1){missing++;continue;}
-    if(filters.trainer&&trainer!==filters.trainer)continue;
-    if(filters.pop&&pop!==Number(filters.pop))continue;
-    const key=JSON.stringify([trainer,pop]);
-    if(!groups.has(key))groups.set(key,{trainer,pop,rides:0,first:0,second:0,third:0,places:0});
+    const incomplete=selected.some(d=>values[d.key]==='不明');
+    if(incomplete){unknown++;if(options.excludeUnknown){excluded++;continue;}}
+    const key=JSON.stringify(selected.map(d=>values[d.key]));
+    if(!groups.has(key))groups.set(key,{values:Object.fromEntries(selected.map(d=>[d.key,values[d.key]])),rides:0,first:0,second:0,third:0,places:0,incomplete});
     const g=groups.get(key);g.rides++;
     if(rank===1)g.first++;if(rank===2)g.second++;if(rank===3)g.third++;if(rank<=3)g.places++;
   }
-  const rows=[...groups.values()].sort((a,b)=>a.trainer.localeCompare(b.trainer,'ja')||a.pop-b.pop);
-  return {rows,total,missing,shown:rows.reduce((n,r)=>n+r.rides,0)};
+  const min=Math.max(1,Number(options.min)||1);
+  const rows=[...groups.values()].filter(g=>g.rides>=min).sort((a,b)=>b.rides-a.rides||JSON.stringify(a.values).localeCompare(JSON.stringify(b.values),'ja',{numeric:true}));
+  return {selected,rows,total,unknown,excluded,shown:rows.reduce((n,r)=>n+r.rides,0),groupCount:groups.size};
 }
-function jockeyTrainerPopularityBody(data){
-  const rate=(n,d)=>d?(100*n/d).toFixed(1)+'%':'-';
-  return data.rows.map(r=>`<tr><td>${esc(r.trainer)}</td><td>${r.pop}番人気</td><td>${r.rides}</td><td>${r.first}</td><td>${rate(r.first,r.rides)}</td><td>${r.second}</td><td>${rate(r.second,r.rides)}</td><td>${r.third}</td><td>${r.places}</td><td>${rate(r.places,r.rides)}</td><td>${r.rides<5?'少数（5鞍未満）':'—'}</td></tr>`).join('')||'<tr><td colspan="11">該当データなし。調教師・人気のある結果が必要です。</td></tr>';
+function jockeyCrossTable(data){
+  const rate=(n,d)=>(100*n/d).toFixed(1)+'%';
+  const heading=data.selected.length?data.selected.map(d=>'<th>'+esc(d.label)+'</th>').join(''):'<th>条件</th>';
+  const body=data.rows.map(g=>{
+    const cells=data.selected.length?data.selected.map(d=>'<td>'+esc(g.values[d.key])+'</td>').join(''):'<td>すべて合算</td>';
+    return `<tr>${cells}<td>${g.rides}</td><td>${g.first}</td><td>${rate(g.first,g.rides)}</td><td>${g.second}</td><td>${rate(g.second,g.rides)}</td><td>${g.third}</td><td>${g.places}</td><td>${rate(g.places,g.rides)}</td><td>${[g.incomplete?'不明条件あり':'',g.rides<5?'5鞍未満':''].filter(Boolean).join('・')||'—'}</td></tr>`;
+  }).join('');
+  return `<table><thead><tr>${heading}<th>騎乗数</th><th>1着</th><th>1着率</th><th>2着</th><th>2着率</th><th>3着</th><th>3着内</th><th>3着内率</th><th>注意</th></tr></thead><tbody>${body||'<tr><td colspan="'+(Math.max(1,data.selected.length)+9)+'">該当データなし。期間・絞り込み・最低騎乗数を確認してください。</td></tr>'}</tbody></table>`;
 }
-function jockeyTrainerPopularityCard(name){
-  const data=jockeyTrainerPopularityRows(state.history,name);
-  const trainers=[...new Set(data.rows.map(r=>r.trainer))],pops=[...new Set(data.rows.map(r=>r.pop))].sort((a,b)=>a-b);
-  return `<div class="patternCard"><h4>騎手 × 調教師 × 人気別</h4><p>騎手：<b>${esc(name)}</b> ／ 人気順位ごとの実数と割合</p>
-  <div class="row"><label>開始日 <input id="jtpFrom" type="date"></label><label>終了日 <input id="jtpTo" type="date"></label></div>
-  <div class="row"><label>調教師 <select id="jtpTrainer"><option value="">すべて</option>${trainers.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label><label>人気 <select id="jtpPop"><option value="">すべて</option>${pops.map(p=>`<option value="${p}">${p}番人気</option>`).join('')}</select></label><button class="btn secondary" id="jtpApply">絞り込む</button><button class="btn secondary" id="jtpReset">すべて表示</button></div>
-  <p class="muted" id="jtpStatus">全期間 ／ 表示対象 ${data.shown}鞍 ／ 調教師・人気不足 ${data.missing}鞍</p>
-  <div class="tablewrap"><table><thead><tr><th>調教師</th><th>人気</th><th>騎乗数</th><th>1着</th><th>1着率</th><th>2着</th><th>2着率</th><th>3着</th><th>3着内</th><th>3着内率</th><th>件数の注意</th></tr></thead><tbody id="jtpBody">${jockeyTrainerPopularityBody(data)}</tbody></table></div>
-  <p class="muted">1着率・2着率は、それぞれその着順だった割合。3着内率は1～3着の合計です。保存済み学習騎乗（復元分を含む）を集計し、調教師・人気不明は除外。未入力の日は全期間として扱います。少数の高率だけで相性が良いとは判断できません。この3条件の集計は参考表示で、予想点への新たな加算はありません。</p></div>`;
+function jockeyCrossStatus(data){
+  return '表示 '+data.rows.length+'組・'+data.shown+'鞍 ／ 絞り込み対象 '+data.total+'鞍 ／ 選択条件に不明あり '+data.unknown+'鞍（除外 '+data.excluded+'鞍）';
 }
-function bindJockeyTrainerPopularity(name){
+function jockeyCrossCard(name){
+  const history=(state.history||[]).filter(r=>r.jockey===name&&r.rank!=null&&r.rank!==''&&Number.isInteger(Number(r.rank))&&Number(r.rank)>0);
+  const dims=jockeyCrossDimensions(),data=jockeyCrossRows(history,name);
+  const controls=dims.map(d=>{
+    const values=[...new Set(history.map(d.value))].sort((a,b)=>a.localeCompare(b,'ja',{numeric:true}));
+    return `<div><label><input type="checkbox" id="jcUse_${d.key}" checked> ${esc(d.label)}を掛け合わせる</label><br><select aria-label="${esc(d.label)}の絞り込み" id="jcFilter_${d.key}"><option value="">すべて</option>${values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select></div>`;
+  }).join('');
+  return `<div class="patternCard"><h4>騎手 × 全条件の掛け合わせ</h4><p>騎手：<b>${esc(name)}</b>。チェックした条件がすべて同じ騎乗を、1行にまとめます。</p>
+  <div class="row"><label>開始日 <input type="date" id="jcFrom"></label><label>終了日 <input type="date" id="jcTo"></label><label>最低騎乗数 <input type="number" id="jcMin" min="1" step="1" value="1" style="width:75px"></label></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0">${controls}</div>
+  <div class="row"><label><input type="checkbox" id="jcExclude"> 選択した条件が不明の騎乗を除外</label><button class="btn primary" id="jcApply">この条件で集計</button><button class="btn secondary" id="jcReset">すべての条件に戻す</button></div>
+  <p id="jcStatus" class="muted">${jockeyCrossStatus(data)}</p><div class="tablewrap" id="jcTable">${jockeyCrossTable(data)}</div>
+  <p class="muted">全条件で細かく分かれすぎるときは、チェックを外して集計してください。選択欄は絞り込みに使い、チェックを外した条件にも適用します。クラスは現在の分類（A・B・Cなど）で、組番号は区別しません。稍＝稍重、不＝不良として集計。欠けた条件は「不明」と表示します。</p>
+  <p class="muted">1着率・2着率はそれぞれの着順、3着内率は1～3着の割合。保存済み学習騎乗（復元分を含む）の実数です。少数の高率だけで相性は判断できません。この集計は参考表示で、予想点への追加加算は行いません。</p></div>`;
+}
+function bindJockeyCross(name){
+  const dims=jockeyCrossDimensions();
   const apply=()=>{
-    const from=$('jtpFrom').value,to=$('jtpTo').value;
-    if(from&&to&&from>to){$('jtpStatus').textContent='開始日は終了日以前にしてください。';return;}
-    const data=jockeyTrainerPopularityRows(state.history,name,{from,to,trainer:$('jtpTrainer').value,pop:$('jtpPop').value});
-    $('jtpBody').innerHTML=jockeyTrainerPopularityBody(data);
-    $('jtpStatus').textContent=`${from||'開始指定なし'} ～ ${to||'終了指定なし'} ／ 表示対象 ${data.shown}鞍 ／ 期間内の調教師・人気不足 ${data.missing}鞍`;
+    const from=$('jcFrom').value,to=$('jcTo').value;
+    if(from&&to&&from>to){$('jcStatus').textContent='開始日は終了日以前にしてください。';return;}
+    const data=jockeyCrossRows(state.history,name,{from,to,min:$('jcMin').value,excludeUnknown:$('jcExclude').checked,
+      keys:dims.filter(d=>$('jcUse_'+d.key).checked).map(d=>d.key),filters:Object.fromEntries(dims.map(d=>[d.key,$('jcFilter_'+d.key).value]))});
+    $('jcStatus').textContent=jockeyCrossStatus(data);$('jcTable').innerHTML=jockeyCrossTable(data);
   };
-  $('jtpApply').addEventListener('click',apply);
-  $('jtpReset').addEventListener('click',()=>{for(const id of ['jtpFrom','jtpTo','jtpTrainer','jtpPop'])$(id).value='';apply();});
+  $('jcApply').addEventListener('click',apply);
+  $('jcReset').addEventListener('click',()=>{
+    $('jcFrom').value='';$('jcTo').value='';$('jcMin').value='1';$('jcExclude').checked=false;
+    for(const d of dims){$('jcUse_'+d.key).checked=true;$('jcFilter_'+d.key).value='';}
+    apply();
+  });
 }
 
 function trainerPatternTable(entries){
@@ -2005,7 +2039,7 @@ function trainerPatternTable(entries){
 }
 function popularityExpectationCard(st){if(!st.popRides)return `<div class="patternCard"><h4>人気なり診断</h4><p class="muted">人気データのある結果がまだありません。</p></div>`;const atLeast=st.popBetter+st.popEqual;const diff=st.popDiffSum/st.popRides;const diffText=`${diff>0?'+':''}${diff.toFixed(2)}`;return `<div class="patternCard"><h4>人気なり診断</h4><p><b>対象 ${st.popRides}鞍</b></p><div class="tablewrap"><table><tr><th>判定</th><th>回数</th><th>率</th></tr><tr><td>人気より上の着順</td><td>${st.popBetter}</td><td>${pct(st.popBetter,st.popRides)}</td></tr><tr><td>人気どおり</td><td>${st.popEqual}</td><td>${pct(st.popEqual,st.popRides)}</td></tr><tr><td>人気より下の着順</td><td>${st.popWorse}</td><td>${pct(st.popWorse,st.popRides)}</td></tr><tr><td><b>人気以上</b></td><td><b>${atLeast}</b></td><td><b>${pct(atLeast,st.popRides)}</b></td></tr></table></div><p class="muted">平均人気差 ${diffText}。プラスほど、人気順位より上の着順へ持ってきています。</p></div>`}
 function bestPattern(st){const all=[];for(const [type,obj] of [['競馬場',st.venues],['コース',st.courses],['馬場',st.goings],['人気帯',st.pops]])for(const [key,x] of Object.entries(obj))if(x.rides>=3)all.push({type,key,...x,score:(x.wins*2+x.places)/x.rides});return all.sort((a,b)=>b.score-a.score||b.rides-a.rides)[0]||null}
-function renderJockeyDetail(name){const st=jockeyStats().find(x=>x.name===name);if(!st){$('jockeyDetail').textContent='騎手を選択してください。';return}const best=bestPattern(st);const popOrder=['1人気','2-3人気','4-6人気','7人気以下'];const popEntries=popOrder.filter(k=>st.pops[k]).map(k=>[k,st.pops[k]]);const zeroPop=()=>({rides:0,wins:0,places:0,rankSum:0});const exactPopEntries=Array.from({length:12},(_,i)=>{const k=`${i+1}人気`;return [k,st.popExact[k]||zeroPop()]});$('jockeyDetail').innerHTML=`<h3>${esc(st.name)} ${best?`<span class="badge">得意候補 ${esc(best.type)}: ${esc(best.key)}</span>`:''}</h3><p><b>${st.rides}鞍</b> / 1着 ${st.wins}（${pct(st.wins,st.rides)}） / 3着内 ${st.places}（${pct(st.places,st.rides)}） / 平均着順 ${avgRankText(st)}</p><p class="muted">現在の学習内容：競馬場 / コース距離 / 馬場 / 人気順位 / クラス / 開催日目 / 調教師コンビ / 当日成績×R / 位置 / 相手比較 / 直前騎乗→次騎乗。人気別・クラス・調教師コンビは騎手点へ補正し、直前騎乗パターンは参考表示です。</p>${jockeyTrainerPopularityCard(st.name)}<div class="patternGrid">${patternTable('競馬場別',Object.entries(st.venues),'競馬場')}${patternTable('コース・距離別',Object.entries(st.courses),'コース')}${patternTable('馬場別',Object.entries(st.goings),'馬場')}${patternTable('クラス別',Object.entries(st.classes||{}),'クラス')}${patternTable('開催日目別',Object.entries(st.meetingDays||{}),'開催日目')}${trainerPatternTable(Object.entries(st.trainers||{}))}${patternTable('人気帯別',popEntries,'人気帯')}${patternTable('人気順位別',exactPopEntries,'人気')}${patternTable('当日成績 × R',dailyPatternEntries(name),'状態')}${dailyRideCountCard(st.name)}${nextRideTransitionTable(name)}${popularityExpectationCard(st)}</div>`;bindDailyRideCount(st.name);bindJockeyTrainerPopularity(st.name)}
+function renderJockeyDetail(name){const st=jockeyStats().find(x=>x.name===name);if(!st){$('jockeyDetail').textContent='騎手を選択してください。';return}const best=bestPattern(st);const popOrder=['1人気','2-3人気','4-6人気','7人気以下'];const popEntries=popOrder.filter(k=>st.pops[k]).map(k=>[k,st.pops[k]]);const zeroPop=()=>({rides:0,wins:0,places:0,rankSum:0});const exactPopEntries=Array.from({length:12},(_,i)=>{const k=`${i+1}人気`;return [k,st.popExact[k]||zeroPop()]});$('jockeyDetail').innerHTML=`<h3>${esc(st.name)} ${best?`<span class="badge">得意候補 ${esc(best.type)}: ${esc(best.key)}</span>`:''}</h3><p><b>${st.rides}鞍</b> / 1着 ${st.wins}（${pct(st.wins,st.rides)}） / 3着内 ${st.places}（${pct(st.places,st.rides)}） / 平均着順 ${avgRankText(st)}</p><p class="muted">現在の学習内容：競馬場 / コース距離 / 馬場 / 人気順位 / クラス / 開催日目 / 調教師コンビ / 当日成績×R / 位置 / 相手比較 / 直前騎乗→次騎乗。人気別・クラス・調教師コンビは騎手点へ補正し、直前騎乗パターンは参考表示です。</p>${jockeyCrossCard(st.name)}<div class="patternGrid">${patternTable('競馬場別',Object.entries(st.venues),'競馬場')}${patternTable('コース・距離別',Object.entries(st.courses),'コース')}${patternTable('馬場別',Object.entries(st.goings),'馬場')}${patternTable('クラス別',Object.entries(st.classes||{}),'クラス')}${patternTable('開催日目別',Object.entries(st.meetingDays||{}),'開催日目')}${trainerPatternTable(Object.entries(st.trainers||{}))}${patternTable('人気帯別',popEntries,'人気帯')}${patternTable('人気順位別',exactPopEntries,'人気')}${patternTable('当日成績 × R',dailyPatternEntries(name),'状態')}${dailyRideCountCard(st.name)}${nextRideTransitionTable(name)}${popularityExpectationCard(st)}</div>`;bindDailyRideCount(st.name);bindJockeyCross(st.name)}
 function renderDashboard(){state=loadState();if(!Array.isArray(state.races))state.races=[];if(!Array.isArray(state.history))rebuildHistory();if(!Array.isArray(state.raceCards))state.raceCards=[];rebuildHorseHistory();const stats=jockeyStats();$('raceCount').textContent=state.races.length;$('rideCount').textContent=(state.history||[]).length;$('jockeyCount').textContent=stats.length;$('jockeyBody').innerHTML=stats.length?stats.map(x=>`<tr class="clickrow" data-jockey="${esc(x.name)}"><td><b>${esc(x.name)}</b></td><td>${x.rides}</td><td>${x.wins}</td><td>${pct(x.wins,x.rides)}</td><td>${x.places}</td><td>${pct(x.places,x.rides)}</td><td>${avgRankText(x)}</td></tr>`).join(''):'<tr><td colspan="7">まだ登録された騎手がありません。</td></tr>';document.querySelectorAll('[data-jockey]').forEach(tr=>tr.addEventListener('click',()=>renderJockeyDetail(tr.dataset.jockey)));$('cardBody').innerHTML=state.raceCards.length?[...state.raceCards].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>✅</td><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="6">保存済み出馬表はありません。</td></tr>';$('raceBody').innerHTML=state.races.length?[...state.races].sort((a,b)=>String(b.meta?.date||'').localeCompare(String(a.meta?.date||''))||Number(b.meta?.raceNo||0)-Number(a.meta?.raceNo||0)).map(r=>`<tr><td>${esc(r.meta?.date||'')}</td><td>${esc(r.meta?.venue||'')}</td><td>${r.meta?.raceNo??''}</td><td>${esc(r.meta?.raceName||'')}</td><td>${(r.rows||[]).length}</td></tr>`).join(''):'<tr><td colspan="5">保存レースはありません。</td></tr>';const horseCount=new Set((state.horseHistory||[]).map(r=>r.name).filter(Boolean)).size;$('manageStatus').textContent=`保存レース: ${state.races.length} / 学習騎乗: ${(state.history||[]).length}（復元 ${(state.seedHistory||[]).length}） / 馬成績: ${(state.horseHistory||[]).length}走・${horseCount}頭 / 出馬表: ${state.raceCards.length}`}
 function downloadJSON(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`shunten_backup_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href)}
 $('autoBackupBtn').addEventListener('click',chooseAutoJsonBackup);
