@@ -9,10 +9,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v489 -->
+<!-- deploy-refresh-v490 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.89：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.90：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1277,8 +1277,9 @@ function renderCommonAudit(bt){
 }
 
 
-function buildCrossScoreIndex(history){
-  const index=new Map(),dims=jockeyCrossDimensions();
+function buildCrossScoreIndex(history,keys=null){
+  const index=new Map(),dims=jockeyCrossDimensions().filter(d=>!keys||keys.includes(d.key));
+  index.dimensions=dims;
   for(const r of history||[]){
     const date=dateNumber(r.date),rank=Number(r.rank);
     if(!r.jockey||!date||r.rank==null||r.rank===''||!Number.isInteger(rank)||rank<1)continue;
@@ -1289,21 +1290,21 @@ function buildCrossScoreIndex(history){
   return index;
 }
 function crossScoreAdjustment(row,meta,index){
-  const target=dateNumber(meta?.date),dims=jockeyCrossDimensions();
+  const target=dateNumber(meta?.date),dims=index.dimensions||jockeyCrossDimensions();
   const values=dims.map(d=>d.value({...row,...meta,trainer:row?.trainer,pop:row?.pop}));
   const missing=dims.filter((d,i)=>values[i]==='不明').map(d=>d.label);
-  const out={winAdj:0,placeAdj:0,n:0,referenceN:0,ready:false,reason:''};
-  if(!target){out.reason='対象日不明・補正0';return out;}
-  if(missing.length){out.reason=missing.join('・')+'不明・補正0';return out;}
+  const out={winAdj:0,placeAdj:0,n:0,referenceN:0,ready:false,status:'',reason:''};
+  if(!target){out.status='missing';out.reason='対象日不明・補正0';return out;}
+  if(missing.length){out.status='missing';out.reason=missing.join('・')+'不明・補正0';return out;}
   const key=JSON.stringify(values),prior=(index.get(row?.jockey)||[]).filter(r=>r.date<target&&r.key!=null);
   const match=prior.filter(r=>r.key===key),reference=prior.filter(r=>r.key!==key);
   out.n=match.length;out.referenceN=reference.length;
-  if(match.length<5||reference.length<5){out.reason='全条件一致'+match.length+'鞍／比較'+reference.length+'鞍・各5鞍未満は補正0';return out;}
+  if(match.length<5||reference.length<5){out.status='short';out.reason='全条件一致'+match.length+'鞍／比較'+reference.length+'鞍・各5鞍未満は補正0';return out;}
   const rate=(rows,place)=>rows.filter(r=>place?r.rank<=3:r.rank===1).length/rows.length;
   const shrink=match.length/(match.length+20)*reference.length/(reference.length+20);
   out.winAdj=clampValue(10*(rate(match,false)-rate(reference,false))*shrink,-3,3);
   out.placeAdj=clampValue(10*(rate(match,true)-rate(reference,true))*shrink,-3,3);
-  out.ready=true;out.reason='全条件一致'+match.length+'鞍／比較'+reference.length+'鞍';
+  out.ready=true;out.status='ready';out.reason='全条件一致'+match.length+'鞍／比較'+reference.length+'鞍';
   return out;
 }
 function crossTrialScore(base,adj){return base==null||!Number.isFinite(Number(base))?null:clampValue(Number(base)+adj,0,100);}
@@ -1325,18 +1326,69 @@ function summarizeCrossTrial(records){
   };
   return {cutoff,rows:['base','win','place'].map(key=>({key,all:summarize(records,key),recent:summarize(cutoff?records.filter(r=>r.date>=cutoff):[],key)}))};
 }
-function renderCrossTrial(bt){
+function renderCrossTrial(bt,config=null){
   const records=bt.crossTrialRecords||[],summary=summarizeCrossTrial(records),support=bt.crossTrialSupport||{total:0,ready:0,applied:0};
   const labels={base:'現在B（補正なし）',win:'B＋掛け合わせ・1着向け',place:'B＋掛け合わせ・3着内向け'};
   const roi=(n,ret)=>n?(ret/n).toFixed(1)+'%':'算出不可';
-  let html='<h3>試験：全条件の掛け合わせ補正（未採用）</h3><p>対象馬 '+support.total+'頭 ／ 補正に必要な件数あり '+support.ready+'頭 ／ 補正が0以外 '+support.applied+'頭</p>';
-  html+='<p class="muted">騎手×調教師×人気×馬場×クラス×競馬場×コース距離×開催日目×Rの全一致。対象日より前の結果だけを使い、同日・日付不明・条件不明は学習対象外。同じ騎手の全条件が揃った他条件の成績と比較し、一致・比較が各5鞍以上のときだけ補正。件数に応じて縮小し、各上限±3点。条件の自動緩和はしません。</p>';
+  let html='<h3>'+esc(config?.title||'試験：全条件の掛け合わせ補正（未採用）')+'</h3><p>対象馬 '+support.total+'頭 ／ 補正に必要な件数あり '+support.ready+'頭 ／ 補正が0以外 '+support.applied+'頭</p>';
+  html+='<p class="muted">'+esc(config?.description||'騎手×調教師×人気×馬場×クラス×競馬場×コース距離×開催日目×Rの全一致。')+' 対象日より前の結果だけを使い、同日・日付不明・対象条件不明は学習対象外。同じ騎手の対象条件が揃った他条件の成績と比較し、一致・比較が各5鞍以上のときだけ補正。件数に応じて縮小し、各上限±3点。条件の自動緩和はしません。</p>';
+  if(config)html+='<p class="muted">対象条件・日付不明 '+(support.missing||0)+'頭 ／ 一致または比較の件数不足 '+(support.short||0)+'頭</p>';
   for(const [period,title] of [['all','全期間'],['recent','直近日付30%（参考）']]){
     html+='<h4>'+title+'</h4><div class="tablewrap"><table><tr><th>方式</th><th>評価R</th><th>1位変更R</th><th>1着率</th><th>3着内率</th><th>単勝ROI</th><th>単勝・最高1件除外</th><th>複勝ROI</th><th>複勝・最高1件除外</th></tr>';
     for(const r of summary.rows){const x=r[period];html+=`<tr><td>${labels[r.key]}</td><td>${x.n}</td><td>${x.changed}</td><td>${backtestPct(x.hits,x.n)} (${x.hits}/${x.n})</td><td>${backtestPct(x.places,x.n)} (${x.places}/${x.n})</td><td>${roi(x.winN,x.winRet)}<div class="muted">${x.winN}R／不足${x.n-x.winN}R・投資${x.winN*100}円／払戻${x.winRet}円</div></td><td>${roi(x.winTrimN,x.winTrimRet)}</td><td>${roi(x.placeN,x.placeRet)}<div class="muted">${x.placeN}R／不足${x.n-x.placeN}R・投資${x.placeN*100}円／払戻${x.placeRet}円</div></td><td>${roi(x.placeTrimN,x.placeTrimRet)}</td></tr>`;}
     html+='</table></div>';
   }
   return html+'<p class="muted">直近開始：'+esc(summary.cutoff||'日数不足')+'。同一候補・同一レースで比較。払戻不足は券種ごとに3方式共通で投資と払戻から除外。最高配当除外は的中1件と投資100円を除外します。人気など既存補正との重なりは残るため試験扱いです。スコアは確率ではありません。既存データの再集計であり将来検証ではありません。</p>';
+}
+
+
+function partialCrossProfiles(){
+  return [
+    {key:'tp',title:'① 騎手 × 調教師 × 人気',keys:['trainer','pop']},
+    {key:'gc',title:'② 騎手 × 馬場 × コース・距離',keys:['going','course']},
+    {key:'cp',title:'③ 騎手 × クラス × 人気',keys:['class','pop']}
+  ];
+}
+function createPartialCrossTrials(history){
+  return partialCrossProfiles().map(p=>({...p,index:buildCrossScoreIndex(history,p.keys),records:[],support:{total:0,ready:0,applied:0,missing:0,short:0}}));
+}
+function partialCrossScores(row,meta,base,trials){
+  const scores={};
+  for(const p of trials){
+    const info=crossScoreAdjustment(row,meta,p.index);
+    scores[p.key+'Win']=crossTrialScore(base,info.winAdj);
+    scores[p.key+'Place']=crossTrialScore(base,info.placeAdj);
+    if(base!=null&&Number.isFinite(Number(base))){
+      p.support.total++;
+      if(info.ready)p.support.ready++;
+      if(info.status==='missing')p.support.missing++;
+      if(info.status==='short')p.support.short++;
+      if(Math.abs(info.winAdj)>1e-9||Math.abs(info.placeAdj)>1e-9)p.support.applied++;
+    }
+  }
+  return scores;
+}
+function recordPartialCrossTrials(trials,scored,resultByNum,coverage,result,meta){
+  const candidates=scored.filter(x=>x.scoreB!=null&&Number.isFinite(Number(x.scoreB)));
+  if(candidates.length<3)return;
+  for(const p of trials){
+    const picks={};
+    for(const [key,score] of [['base','scoreB'],['win',p.key+'Win'],['place',p.key+'Place']]){
+      const top=backtestRankRows(candidates,score)[0];
+      if(!top)throw new Error('掛け合わせ試験の候補が不足しています');
+      const num=Number(top.row.num),rank=Number(resultByNum.get(num).rank);
+      picks[key]={num,rank,placePay:coverage.place?(rank<=3?singlePayout(result.payouts.place,num):0):null};
+    }
+    p.records.push({date:meta.date,coverage,picks});
+  }
+}
+function renderPartialCrossTrials(bt){
+  let html='<h3>試験：3つの掛け合わせを個別比較（未採用）</h3><p>①～③を別々に現在Bへ加えて検証します。3つを合算した点数ではありません。各表の「補正が0以外」「1位変更R」で、実際に働いたかを確認してください。</p>';
+  for(const p of bt.partialCrossTrials||[]){
+    const extra=p.key==='gc'?'競馬場は分けず、同じ芝・ダート等と距離・馬場を集計。':p.key==='cp'?'クラスはA・B・Cなどの分類で、組番号は区別しません。':'人気は人気順位そのもの（2番人気など）で集計。';
+    html+=renderCrossTrial({crossTrialRecords:p.records,crossTrialSupport:p.support},{title:p.title+'（未採用）',description:p.title+'の一致のみを使用。'+extra});
+  }
+  return html;
 }
 
 function runChronologicalBacktest(){
@@ -1373,6 +1425,7 @@ function runChronologicalBacktest(){
   const positionBucketKey=(adj)=>adj>=3?'p3':adj>=1?'p1':adj>-1?'mid':adj>-3?'m1':'m3';
   const details=[],commonWeightRecords=[],payoutAudit=[],crossTrialRecords=[];
   const crossIndex=buildCrossScoreIndex(state.history),crossTrialSupport={total:0,ready:0,applied:0};
+  const partialCrossTrials=createPartialCrossTrials(state.history);
   const jockeyPopPairStats={n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const hybridPairRecords=[];
   const placementWideRecords=[];
@@ -1433,10 +1486,12 @@ function runChronologicalBacktest(){
       const scoreBNoClass=scoreB==null?null:clampValue(Number(q.score)-(Number(q.classAdj)||0)+lineupAdj,0,100);
       const cross=crossScoreAdjustment(row,meta,crossIndex);
       if(scoreB!=null){crossTrialSupport.total++;if(cross.ready)crossTrialSupport.ready++;if(Math.abs(cross.winAdj)>1e-9||Math.abs(cross.placeAdj)>1e-9)crossTrialSupport.applied++;}
-      return {row,scoreCrossWin:crossTrialScore(scoreB,cross.winAdj),scoreCrossPlace:crossTrialScore(scoreB,cross.placeAdj),scoreA,scoreP,scoreQ,scoreB,scoreBNoCombo,scoreBNoClass,scoreC,scoreD,scoreBQ,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,lineupDetail,comboAdj:Number(q.comboAdj)||0,
+      const partialScores=partialCrossScores(row,meta,scoreB,partialCrossTrials);
+      return {...partialScores,row,scoreCrossWin:crossTrialScore(scoreB,cross.winAdj),scoreCrossPlace:crossTrialScore(scoreB,cross.placeAdj),scoreA,scoreP,scoreQ,scoreB,scoreBNoCombo,scoreBNoClass,scoreC,scoreD,scoreBQ,scoreH:h.score,jockeyBase:scoreA,lineupAdj,dayAdj,horseScore:horse,lineupDetail,comboAdj:Number(q.comboAdj)||0,
         scoreM50:blend(0.50),scoreM55:blend(0.55),scoreM60:blend(0.60),scoreM70:blend(0.70),scoreM80:blend(0.80)};
     });
     const coverage=auditPayoutCoverage(result);
+    recordPartialCrossTrials(partialCrossTrials,scored,resultByNum,coverage,result,meta);
     const crossCandidates=scored.filter(x=>x.scoreB!=null&&Number.isFinite(Number(x.scoreB)));
     if(crossCandidates.length>=3){
       const picks={};
@@ -1753,7 +1808,7 @@ function runChronologicalBacktest(){
   highPayoutDiagnostics.sort((a,b)=>b.odds-a.odds||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   qToBRegressions.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
   bRescuedWinners.sort((a,b)=>(Number(b.odds)||0)-(Number(a.odds)||0)||String(a.date).localeCompare(String(b.date))||Number(a.raceNo)-Number(b.raceNo));
-  return {crossTrialRecords,crossTrialSupport,commonWeightRecords,payoutAudit,variants,stats,jockeyPopPairStats,hybridPairBands,secondPlaceTests,secondPlaceValidation,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,popAdjustmentStats,classAdjustmentStats,comboAdjustmentStats,comboAB,classAB,placementJockey,placementFilteredTests,placementWideTests,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
+  return {partialCrossTrials:partialCrossTrials.map(({index,...p})=>p),crossTrialRecords,crossTrialSupport,commonWeightRecords,payoutAudit,variants,stats,jockeyPopPairStats,hybridPairBands,secondPlaceTests,secondPlaceValidation,details,highPayoutDiagnostics,qToBRegressions,bRescuedWinners,positionBuckets,popAdjustmentStats,classAdjustmentStats,comboAdjustmentStats,comboAB,classAB,placementJockey,placementFilteredTests,placementWideTests,skipped,totalResults:(state.races||[]).length,totalCards:(state.raceCards||[]).length};
 }
 function renderBacktest(){
   const bt=runChronologicalBacktest();
@@ -1771,7 +1826,7 @@ function renderBacktest(){
   const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.89（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.90（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
   const jpReverseRoi=jps.reverseStake?100*jps.reverseReturn/jps.reverseStake:null;
@@ -1863,7 +1918,7 @@ function renderBacktest(){
     return `<tr><td><b>${esc(x.label)}</b></td><td>${x.n}</td><td>${signed(avgAdj)}</td><td>${backtestPct(x.wins,x.n)} <span class="muted">(${x.wins}/${x.n})</span></td><td>${backtestPct(x.places,x.n)} <span class="muted">(${x.places}/${x.n})</span></td><td>${roi==null?'-':roi.toFixed(1)+'%'}<div class="muted">ROI対象 ${x.oddsN}R / 投資${x.stake.toLocaleString()}円 / 払戻${x.ret.toLocaleString()}円</div></td><td>${avgOdds==null?'-':avgOdds.toFixed(2)+'倍'}</td></tr>`;
   };
   const positionDiag=`<h3>位置補正の強さ別診断（B 1位評価馬）</h3><div class="tablewrap"><table><thead><tr><th>位置補正帯</th><th>該当R</th><th>平均位置補正</th><th>1着率</th><th>3着内率</th><th>単勝回収率</th><th>平均選択単勝</th></tr></thead><tbody>${positionOrder.map(positionRow).join('')}</tbody></table></div><p class="muted">各レースでB（騎手適性＋並び）が1位評価した馬を、その馬の「位置補正」だけで5区分に分けた診断です。+3以上が本当に好成績か、位置補正が強すぎないかを確認します。境界は +3以上 / +1以上3未満 / -1より大きく+1未満 / -3より大きく-1以下 / -3以下 として重複なく集計します。重みは変更していません。</p>`;
-  $('backtestSummary').innerHTML=renderCrossTrial(bt)+renderCommonABH(bt)+renderCommonAudit(bt)+classABHtml+comboABHtml+jockeyPopPairHtml+hybridPairHtml+secondPlaceHtml+secondValidationHtml+`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定複勝回収率</th><th>馬単表裏</th><th>ワイド1－2位</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${placeRoiCell(v)}${betCell(v,'exacta')}${betCell(v,'wide')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">複勝回収率は各方式の1位評価馬へ100円固定です。馬単表裏は評価1位・2位の2点、ワイドは評価1位－2位の1点です。保存済み全レースでは的中率を計算し、払戻保存済みレースでは回収率も計算します。単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${splitDiag}${qbDiag}${bqDiag}${highDiag}${positionDiag}`;
+  $('backtestSummary').innerHTML=renderPartialCrossTrials(bt)+'<details><summary>従来の全条件一致試験を開く</summary>'+renderCrossTrial(bt)+'</details>'+renderCommonABH(bt)+renderCommonAudit(bt)+classABHtml+comboABHtml+jockeyPopPairHtml+hybridPairHtml+secondPlaceHtml+secondValidationHtml+`<div class="tablewrap"><table><thead><tr><th>方式</th><th>評価R</th><th>1位評価の1着率</th><th>1位評価の3着内率</th><th>勝ち馬TOP3率</th><th>実着1〜3が評価TOP3内</th><th>確定複勝回収率</th><th>馬単表裏</th><th>ワイド1－2位</th><th>確定単勝回収率</th></tr></thead><tbody>${bt.variants.map(v=>{const st=bt.stats[v.key];return `<tr><td><b>${esc(v.name)}</b></td><td>${st.n}</td>${cell(v,'top1Win')}${cell(v,'top1Place')}${cell(v,'winnerTop3')}${cell(v,'exactTop3')}${placeRoiCell(v)}${betCell(v,'exacta')}${betCell(v,'wide')}${roiCell(v)}</tr>`}).join('')}</tbody></table></div><p class="muted">複勝回収率は各方式の1位評価馬へ100円固定です。馬単表裏は評価1位・2位の2点、ワイドは評価1位－2位の1点です。保存済み全レースでは的中率を計算し、払戻保存済みレースでは回収率も計算します。単勝回収率は各方式の1位評価馬へ100円固定投資し、結果ページに保存された確定単勝オッズで計算します。オッズが保存されていない選択は回収率対象から除外します。これはモデル比較用の事後検証で、実戦時に同じオッズで買えたことを意味しません。50:50・55:45・60:40・70:30・80:20は引き続き暫定比較です。</p><h3>回収率の安定性診断</h3><div class="tablewrap"><table><thead><tr><th>方式</th><th>単勝的中</th><th>的中平均単勝</th><th>最大単勝</th><th>最大配当1頭除外ROI</th><th>1.0〜2.9倍</th><th>3.0〜4.9倍</th><th>5.0〜9.9倍</th><th>10倍以上</th></tr></thead><tbody>${bt.variants.map(roiDiagnostic).join('')}</tbody></table></div><p class="muted">最大配当1頭除外ROIは、その最高配当の的中レース1件を投資100円ごと除いて再計算します。各オッズ帯は「的中数/購入数」も併記します。1頭の大穴だけで全体回収率が上がっていないかを見るための診断です。</p>${splitDiag}${qbDiag}${bqDiag}${highDiag}${positionDiag}`;
   $('backtestDetail').innerHTML=`<div class="tablewrap"><table><thead><tr><th>日付</th><th>競馬場</th><th>R</th><th>勝ち馬</th>${bt.variants.map(v=>`<th>${esc(v.name)} 1位</th>`).join('')}</tr></thead><tbody>${bt.details.map(d=>`<tr><td>${esc(d.date)}</td><td>${esc(d.venue)}</td><td>${d.raceNo}R</td><td><b>${d.winnerNum} ${esc(d.winnerName)}</b></td>${bt.variants.map(v=>{const x=d.tops[v.key];if(!x)return '<td class="muted">--</td>';return `<td class="${x.hit?'hit':'miss'}">${x.hit?'✓':'・'} ${x.num} ${esc(x.name)}<div class="muted">単勝 ${x.odds??'-'}</div></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
