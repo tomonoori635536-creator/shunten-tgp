@@ -10,10 +10,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v492 -->
+<!-- deploy-refresh-v493 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.92：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.93：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -39,12 +39,12 @@
 
 <div class="patternCard" style="margin:16px 0">
 <h3>当日の騎乗チェック：1R〜12R</h3>
-<p>○ 来た＝3着以内 ／ × 来ていない＝4着以下など ／ — 騎乗なし。未入力と騎乗なしは区別します。</p>
+<p>○ 来た＝3着以内 ／ × 来ていない＝4着以下など ／ — 騎乗なし。未入力と騎乗なしは区別します。出馬表を1R〜12Rまで保存すると各騎手の3着内推定％と各Rの総合1位を表示します。</p>
 <div class="row"><label>日付 <input id="rideBoardDate" type="date"></label><label>競馬場 <select id="rideBoardVenue"></select></label><button id="rideBoardToday" class="btn secondary">今日</button></div>
 <div class="row" style="margin-top:8px"><label>騎手を追加 <input id="rideBoardAddName" list="rideBoardNames" placeholder="騎手名"><datalist id="rideBoardNames"></datalist></label><button id="rideBoardAdd" class="btn secondary">入力行を追加</button><label>表示を絞る <input id="rideBoardSearch" type="search" placeholder="騎手名で検索"></label></div>
 <p id="rideBoardStatus" class="muted" role="status"></p>
 <div id="rideBoard" class="tablewrap rideBoard"></div>
-<p class="muted">選ぶと自動保存します。保存済み出馬表から騎手・馬番・人気、結果から着順を表示します。手入力の○×は同日・同場の後続Rの最終騎手点に反映します。○を1着とは扱わず、元の学習成績は変更しません。「手入力を解除」を選ぶと保存結果の表示に戻ります。JSON書き出しにも含まれます。</p>
+<p class="muted">選ぶと自動保存します。保存済み出馬表から騎手・馬番・人気、結果から着順を表示します。手入力の○×は同日・同場の後続Rの3着内推定％と最終騎手点に反映します。○を1着とは扱わず、元の学習成績は変更しません。推定％は過去の騎手全体、調教師×人気、馬場×コース、クラス×人気、競馬場×コース、当日経過を件数に応じて合成した参考値です。「手入力を解除」を選ぶと保存結果の表示に戻ります。JSON書き出しにも含まれます。</p>
 </div>
 <h3>騎手の成績一覧</h3>
 <div class="row"><label>騎手を探す <input id="jockeySearch" type="search" placeholder="名前の一部で検索"></label><label>並び順 <select id="jockeySort"><option value="rides">騎乗数が多い順</option><option value="name">名前順</option><option value="win">1着率が高い順</option><option value="place">3着内率が高い順</option></select></label><span id="jockeyListStatus" class="muted"></span></div>
@@ -1898,7 +1898,7 @@ function renderBacktest(){
   const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.92（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.93（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   $('backtestStatus').textContent+='\nGは当日○×補正を保存結果だけで再現します。手入力メモはバックテストに使わず、当時の手入力評価の成績を証明するものではありません。従来の試験表の現在Bは当日補正前の比較基準です。';
   const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
@@ -2291,14 +2291,76 @@ function buildRideBoardRows(data,date,venue,extraNames=[]){
     return {...x,hit,miss,pending,rides};
   });
 }
+
+function overallPlaceEstimate(row,meta,data,dayModel,current){
+  const target=dateNumber(meta?.date),jockey=String(row?.jockey||'');
+  if(!target||!jockey)return {pct:null,come:null,label:'算出不可',note:'日付または騎手不明'};
+  const allPrior=(data.history||[]).filter(r=>{const d=dateNumber(r.date),rank=Number(r.rank);return d&&d<target&&r.rank!=null&&r.rank!==''&&Number.isInteger(rank)&&rank>=1;});
+  if(!allPrior.length)return {pct:null,come:null,label:'未学習',note:'対象日より前の結果なし'};
+  const globalRate=allPrior.filter(r=>Number(r.rank)<=3).length/allPrior.length;
+  const prior=allPrior.filter(r=>r.jockey===jockey);
+  if(!prior.length)return {pct:null,come:null,label:'未学習',note:'この騎手の過去結果なし'};
+  const placeRate=rows=>rows.filter(r=>Number(r.rank)<=3).length/rows.length;
+  const base=(prior.filter(r=>Number(r.rank)<=3).length+globalRate*8)/(prior.length+8);
+  let sum=base*12,weight=12;const reasons=['騎手全体'+prior.length+'鞍'];
+  const course=x=>x.surface&&Number(x.distance)>0?String(x.surface)+Number(x.distance)+'m':'';
+  const cls=horseClassKey(meta),targetGoing=normalizeGoingValue(meta.going),targetCourse=course(meta);
+  const factors=[
+    {label:'調教師×人気',valid:row.trainer&&Number(row.pop)>0,test:r=>String(r.trainer||'')===String(row.trainer)&&Number(r.pop)===Number(row.pop)},
+    {label:'馬場×コース',valid:targetGoing&&targetCourse,test:r=>normalizeGoingValue(r.going)===targetGoing&&course(r)===targetCourse},
+    {label:'クラス×人気',valid:cls&&Number(row.pop)>0,test:r=>horseClassKey(r)===cls&&Number(r.pop)===Number(row.pop)},
+    {label:'競馬場×コース',valid:meta.venue&&targetCourse,test:r=>String(r.venue||'')===String(meta.venue)&&course(r)===targetCourse}
+  ];
+  for(const f of factors){
+    if(!f.valid)continue;
+    const rows=prior.filter(f.test);if(!rows.length)continue;
+    const adjusted=(rows.filter(r=>Number(r.rank)<=3).length+base*8)/(rows.length+8),w=Math.min(rows.length,10);
+    sum+=adjusted*w;weight+=w;reasons.push(f.label+rows.length+'鞍');
+  }
+  const rn=Number(meta.raceNo),ctx=current||{hit:0,miss:0,pending:0,manual:0};
+  if(!ctx.pending&&(ctx.hit||ctx.miss)&&Number.isInteger(rn)){
+    const rows=(dayModel.get(JSON.stringify([jockey,meta.venue,rn]))||[]).filter(r=>r.date<target&&r.hit===ctx.hit&&r.miss===ctx.miss);
+    if(rows.length>=3){
+      const adjusted=(rows.filter(r=>r.placed).length+base*6)/(rows.length+6),w=Math.min(rows.length,12);
+      sum+=adjusted*w;weight+=w;reasons.push('当日○'+ctx.hit+'×'+ctx.miss+'・過去'+rows.length+'件');
+    }else reasons.push('当日パターン'+rows.length+'件（3件未満）');
+  }else if(ctx.pending)reasons.push('前の騎乗未入力'+ctx.pending+'件');
+  const pct=100*clampValue(sum/weight,.05,.85);
+  const label=pct>=50?'来る寄り':pct<30?'来ない寄り':'中間';
+  return {pct,come:pct>=50,label,n:prior.length,note:reasons.join(' / ')};
+}
+function attachRideBoardProbabilities(rows,data,date,venue){
+  const model=buildDayCheckModel(data),cards=new Map();
+  for(const race of data.raceCards||[]){
+    const rn=Number(race.meta?.raceNo);
+    if(rideBoardDay(race.meta?.date)===rideBoardDay(date)&&race.meta?.venue===venue&&rn>=1&&rn<=12)cards.set(rn,race);
+  }
+  for(const x of rows){
+    let hit=0,miss=0,pending=0,manual=0;
+    x.cells=x.cells.map((cell,i)=>{
+      const rn=i+1,card=cards.get(rn),horse=cell.card||cell.result;
+      const ctx={hit,miss,pending,manual};
+      const probability=horse?overallPlaceEstimate({...horse,jockey:x.name},{...(card?.meta||{}),date,venue,raceNo:rn},data,model,ctx):null;
+      if(cell.value==='hit')hit++;else if(cell.value==='miss')miss++;
+      else if(cell.value!=='none'&&(cell.card||cell.result))pending++;
+      if(cell.manual==='hit'||cell.manual==='miss')manual++;
+      return {...cell,probability};
+    });
+  }
+  return rows;
+}
+
 function rideBoardTable(rows){
   const labels={hit:'○ 来た',miss:'× 来ていない',none:'— 騎乗なし'};
-  let html='<table><thead><tr><th>騎手・当日の実数</th>'+Array.from({length:12},(_,i)=>'<th>'+(i+1)+'R</th>').join('')+'</tr></thead><tbody>';
+  const leaders=Array.from({length:12},(_,i)=>rows.map(x=>({name:x.name,p:x.cells[i].probability})).filter(x=>x.p?.pct!=null).sort((a,b)=>b.p.pct-a.p.pct)[0]);
+  let html='<table><thead><tr><th>騎手・当日の実数</th>'+Array.from({length:12},(_,i)=>'<th>'+(i+1)+'R</th>').join('')+'</tr><tr><th>各Rの総合1位</th>'+leaders.map(x=>'<th>'+(x?esc(x.name)+'<br><b>'+x.p.pct.toFixed(1)+'%</b>':'—')+'</th>').join('')+'</tr></thead><tbody>';
   html+=rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b><div class="muted">騎乗 '+x.rides+' / ○ '+x.hit+' / × '+x.miss+' / 未確定 '+x.pending+'</div></td>'+x.cells.map((cell,i)=>{
     const horse=cell.card||cell.result;
     const autoLabel=cell.auto?'保存結果：'+labels[cell.auto]+' '+cell.rank+'着':cell.result?'保存結果：着順未確定':cell.card?'出馬表あり・結果未入力':'予定なし／未登録';
     const initial=cell.manual?'手入力を解除':cell.auto?'保存結果を使用':'未入力';
-    return '<td class="ride-'+(cell.value||'unknown')+'">'+(horse?'<div>'+esc(horse.num??'?')+'番 '+esc(horse.pop!=null?horse.pop+'人気':'人気不明')+'</div><div class="muted">'+esc(horse.name||'')+'</div>':'')+
+    const probability=cell.probability;
+    const probabilityHtml=probability?.pct==null?'':('<div><b>3着内推定 '+probability.pct.toFixed(1)+'%</b></div><div class="muted">'+esc(probability.label)+' / '+esc(probability.note)+'</div>');
+    return '<td class="ride-'+(cell.value||'unknown')+'">'+(horse?'<div>'+esc(horse.num??'?')+'番 '+esc(horse.pop!=null?horse.pop+'人気':'人気不明')+'</div><div class="muted">'+esc(horse.name||'')+'</div>'+probabilityHtml:'')+
       '<select aria-label="'+esc(x.name)+' '+(i+1)+'R" data-ride-jockey="'+esc(x.name)+'" data-ride-r="'+(i+1)+'"><option value="">'+initial+'</option>'+
       Object.entries(labels).map(([key,label])=>'<option value="'+key+'"'+(cell.manual===key?' selected':'')+'>'+label+'</option>').join('')+'</select>'+
       '<div class="muted">'+(cell.manual?'手入力 ／ ':'')+autoLabel+'</div></td>';
@@ -2309,7 +2371,7 @@ let rideBoardExtras=new Map();
 function refreshRideBoard(){
   const date=$('rideBoardDate').value,venue=$('rideBoardVenue').value,key=JSON.stringify([date,venue]);
   const search=$('rideBoardSearch').value.trim();
-  const rows=buildRideBoardRows(state,date,venue,rideBoardExtras.get(key)||[]).filter(x=>!search||x.name.includes(search));
+  const rows=attachRideBoardProbabilities(buildRideBoardRows(state,date,venue,rideBoardExtras.get(key)||[]),state,date,venue).filter(x=>!search||x.name.includes(search));
   $('rideBoard').innerHTML=rideBoardTable(rows);
 }
 function initRideBoard(){
@@ -2366,7 +2428,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.92 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.93 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
