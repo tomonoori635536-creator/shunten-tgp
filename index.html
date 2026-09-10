@@ -10,10 +10,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v493 -->
+<!-- deploy-refresh-v494 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.93：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.94：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -81,16 +81,33 @@ const YEAR_KEY='jockeyPatternBook_collectionYear';
 let parsed=null;
 let state=loadState();
 function emptyState(){return {history:[],seedHistory:[],races:[],horseHistory:[],raceCards:[],evaluations:[],model:{}}}
-function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY)||'null');return x&&typeof x==='object'?Object.assign(emptyState(),x):emptyState()}catch(e){return emptyState()}}
+function loadState(){
+  try{
+    const x=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(!x||typeof x!=='object')return emptyState();
+    const y=Object.assign(emptyState(),x);
+    // 端末保存では再作成できる履歴を省略する。読込後に保存結果から自動復元する。
+    if(x._compactStorage)y.history=null;
+    delete y._compactStorage;
+    return y;
+  }catch(e){return emptyState()}
+}
+function compactStateForDevice(){
+  const compact={...state,_compactStorage:1,history:[],evaluations:[]};
+  // 保存結果から再作成できる馬履歴は端末内で重複保存しない。
+  compact.horseHistory=(state.horseHistory||[]).filter(r=>r?.source!=='saved_result');
+  // 過去走は horseHistory に統合済み。出馬表に残る重複だけを省く。
+  compact.raceCards=(state.raceCards||[]).map(card=>{
+    if(!card||!Object.prototype.hasOwnProperty.call(card,'pastRuns'))return card;
+    const copy={...card};delete copy.pastRuns;return copy;
+  });
+  return compact;
+}
 function persist(){
-  try{localStorage.setItem(KEY,JSON.stringify(state));return true}
+  try{localStorage.setItem(KEY,JSON.stringify(compactStateForDevice()));return true}
   catch(e){
     if(e?.name!=='QuotaExceededError'&&e?.code!==22)throw e;
-    // 馬柱の過去走は horseHistory に統合済み。出馬表側の重複分と再計算可能な評価キャッシュを削る。
-    for(const card of state.raceCards||[])if(card&&Object.prototype.hasOwnProperty.call(card,'pastRuns'))delete card.pastRuns;
-    state.evaluations=[];
-    try{localStorage.setItem(KEY,JSON.stringify(state));return true}
-    catch(e2){throw new Error('端末内の保存容量が不足しています。JSONを書き出した後、古いデータを整理してください。')}
+    throw new Error('端末内の保存容量が不足しています。現在のJSONバックアップを残したまま、保存データを整理してください。');
   }
 }
 function rebuildHistory(){
@@ -1898,7 +1915,7 @@ function renderBacktest(){
   const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.93（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.94（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   $('backtestStatus').textContent+='\nGは当日○×補正を保存結果だけで再現します。手入力メモはバックテストに使わず、当時の手入力評価の成績を証明するものではありません。従来の試験表の現在Bは当日補正前の比較基準です。';
   const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
@@ -2428,7 +2445,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.93 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.94 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
