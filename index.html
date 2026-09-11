@@ -10,10 +10,10 @@
 </style>
 </head>
 <body>
-<!-- deploy-refresh-v494 -->
+<!-- deploy-refresh-v495 -->
 <header>
 <h1>🏇 鞍上パターン帳 × 瞬天 TGP ENGINE</h1>
-<p>クリーン版 v4.94：横長の馬柱表を列単位で読み取り</p>
+<p>クリーン版 v4.95：横長の馬柱表を列単位で読み取り</p>
 </header>
 <main>
 <div class="tabs">
@@ -1915,7 +1915,7 @@ function renderBacktest(){
   const cs=bt.classAdjustmentStats||{applied:0,positive:0,negative:0,zero:0};
   const ts=bt.comboAdjustmentStats||{available:0,applied:0,positive:0,negative:0,zero:0};
   const recalculatedAt=new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.94（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
+  $('backtestStatus').textContent=`✅ 再計算完了 ${recalculatedAt}\n使用モデル: v4.95（人気別±8＋クラス±6＋調教師コンビ段階補正・配置試験停止）\n評価 ${bt.details.length}レース / 人気別補正 ${ps.applied}頭（＋${ps.positive}・－${ps.negative}・ほぼ0=${ps.zero}）\nクラス補正 ${cs.applied}頭（＋${cs.positive}・－${cs.negative}・ほぼ0=${cs.zero}）\n調教師コンビ: 調教師名あり${ts.available}頭 / 5鞍以上で補正${ts.applied}頭（5～9鞍±2・10～19鞍±4・20鞍以上±6）（＋${ts.positive}・－${ts.negative}・ほぼ0=${ts.zero}）\n未来データは不使用。馬能力${horseN}R、仮合成${blendN}Rを評価。除外 ${bt.skipped}レース。`;
   $('backtestStatus').textContent+='\nGは当日○×補正を保存結果だけで再現します。手入力メモはバックテストに使わず、当時の手入力評価の成績を証明するものではありません。従来の試験表の現在Bは当日補正前の比較基準です。';
   const jps=bt.jockeyPopPairStats||{n:0,exactHits:0,reverseHits:0,top2Hits:0,roiN:0,stake:0,returnYen:0,reverseStake:0,reverseReturn:0,boxStake:0,boxReturn:0,supportSum:0};
   const jpRoi=jps.stake?100*jps.returnYen/jps.stake:null;
@@ -2013,11 +2013,53 @@ function renderBacktest(){
 }
 
 function scoreClass(score){if(score==null)return '';return score>=60?'scoreGood':score>=45?'scoreMid':'scoreLow'}
+function raceUpsetOutcome(race){
+  const rows=(race?.rows||[]).filter(r=>Number.isInteger(Number(r.rank))&&Number(r.rank)>=1);
+  const winner=rows.find(r=>Number(r.rank)===1);
+  const winnerPop=Number(winner?.pop);
+  if(!winner||!Number.isInteger(winnerPop)||winnerPop<1)return null;
+  const top3=rows.filter(r=>Number(r.rank)<=3&&Number.isInteger(Number(r.pop))&&Number(r.pop)>=1);
+  const longshots=top3.filter(r=>Number(r.pop)>=6).length;
+  return {upset:winnerPop>=4||longshots>=2,winnerPop,longshots};
+}
+function raceVolatilityForecast(meta,data,fieldSize){
+  const target=dateNumber(meta?.date),races=(data?.races||[]).filter(r=>{
+    const d=dateNumber(r.meta?.date);return d&&target&&d<target&&raceUpsetOutcome(r);
+  });
+  if(!target)return {pct:null,label:'日付不明',note:'対象日が不明のため算出できません',plan:'出馬表の日付を確認してください',n:0};
+  if(races.length<5)return {pct:null,label:'未学習',note:'対象日より前の人気付き結果が5R未満です',plan:'データが増えるまで従来の買い方を使用',n:races.length};
+  const outcomes=races.map(r=>({race:r,out:raceUpsetOutcome(r)}));
+  const globalRate=outcomes.filter(x=>x.out.upset).length/outcomes.length;
+  const cls=horseClassKey(meta),going=normalizeGoingValue(meta?.going),surface=String(meta?.surface||''),distance=Number(meta?.distance),venue=String(meta?.venue||'');
+  const scored=outcomes.map(x=>{
+    const m=x.race.meta||{};let score=0;const fs=(x.race.rows||[]).length;
+    if(venue&&String(m.venue||'')===venue)score+=3;
+    if(surface&&String(m.surface||'')===surface)score+=2;
+    if(distance>0&&Number(m.distance)>0&&Math.abs(Number(m.distance)-distance)<=200)score+=2;
+    if(cls&&horseClassKey(m)===cls)score+=3;
+    if(going&&normalizeGoingValue(m.going)===going)score+=1;
+    if(fieldSize>0&&fs>0&&Math.abs(fs-fieldSize)<=2)score+=1;
+    return {...x,score};
+  }).filter(x=>x.score>=4);
+  const similar=scored.length>=5?scored:outcomes.map(x=>({...x,score:1}));
+  const weightedN=similar.reduce((a,x)=>a+x.score,0);
+  const weightedHits=similar.reduce((a,x)=>a+(x.out.upset?x.score:0),0);
+  const probability=(globalRate*12+weightedHits)/(12+weightedN),pct=100*clampValue(probability,.10,.90);
+  const rawHits=similar.filter(x=>x.out.upset).length,n=similar.length;
+  let label='中波乱',plan='軸1頭＋相手3〜5頭。ワイドを中心にし、馬連・三連複は少額にする';
+  if(pct<35){label='堅め';plan='軸1頭＋相手2〜3頭。ワイド・馬連中心で、穴へ広げすぎない';}
+  else if(pct>=55){label='波乱';plan='1頭固定を弱め、評価上位3頭から複数軸。ワイドBOX・三連複フォーメーション、低信頼なら見送り';}
+  const confidence=n>=30?'高':n>=12?'中':'低';
+  const basis=scored.length>=5?'類似条件':'全体傾向（類似5R未満）';
+  return {pct,label,plan,n,hits:rawHits,confidence,note:`${basis} ${n}R中${rawHits}Rが波乱 ／ 全体${outcomes.length}Rの波乱率 ${(globalRate*100).toFixed(1)}%`};
+}
 function renderPreview(p){
   const m=p.meta||{},modeLabel=p.mode==='result'?'結果ページ':p.mode==='card'?'出馬表':'未判定';
   let html=`<div class="meta"><div class="chip"><b>モード</b><br>${esc(modeLabel)}</div><div class="chip"><b>日付</b><br>${esc(m.date||'不明')}</div><div class="chip"><b>競馬場</b><br>${esc(m.venue||'不明')}</div><div class="chip"><b>開催</b><br>${m.meetingNo&&m.meetingDay?`${m.meetingNo}回 ${m.meetingDay}日目`:'不明'}</div><div class="chip"><b>R</b><br>${m.raceNo??'不明'}</div><div class="chip"><b>条件</b><br>${esc(`${m.surface||'?'}${m.distance||'?'}m ${m.going||''}`)}</div></div>`;
   if(!p.rows?.length){html+=`<p class="warn">馬データを認識できませんでした。</p>`;$('preview').innerHTML=html;return}
   if(p.mode==='card'){
+    const volatility=raceVolatilityForecast(m,state,p.rows.length);
+    html+=`<div class="patternCard" style="margin:12px 0"><h3>過去傾向からの波乱予測（買い方切替）</h3><div class="summary"><div class="chip"><b>波乱確率</b><div class="big">${volatility.pct==null?'--':volatility.pct.toFixed(1)+'%'}</div></div><div class="chip"><b>判定</b><div class="big">${esc(volatility.label)}</div></div><div class="chip"><b>信頼度</b><div class="big">${esc(volatility.confidence||'--')}</div></div></div><p><b>買い方：</b>${esc(volatility.plan)}</p><p class="muted">${esc(volatility.note)}。波乱＝1着4番人気以下、または3着以内に6番人気以下が2頭以上。対象日より前の結果だけを使用します。</p></div>`;
     html+=`<p class="muted">馬能力は直近3走40%・同コース距離25%・同馬場15%・クラス20%の土台で、対象日より前の馬成績だけから計算します。該当データがない項目は残りの項目へ再配分します。騎手の最終点は適性＋並び補正＋当日○×補正です。当日○×は同日・同場の対象Rより前だけを使い、過去の同じ○×回数から3着内傾向を比較します。各3例以上で件数に応じて縮小、上限±3点。元の当日R参考と掛け合わせ試験は別表示です。馬能力と騎手の合成はバックテスト上の仮比較だけで、実戦表示の最終点にはまだ採用しません。</p>`;
     html+=`<div class="tablewrap"><table><thead><tr><th>馬番</th><th>馬名</th><th>今回馬柱</th><th>馬能力</th><th>騎手</th><th>人気</th><th>単勝</th><th>騎手適性</th><th>クラス参考</th><th>並び補正</th><th>当日R参考</th><th>直前騎乗参考</th><th>当日○×補正</th><th>最終騎手（当日反映）</th><th>試験：B基準・掛け合わせ1着</th><th>試験：B基準・掛け合わせ3着内</th><th>信頼度</th><th>当日パターン</th><th>並び学習</th><th>騎手点内訳</th></tr></thead><tbody>`;
     const previewCrossIndex=buildCrossScoreIndex(state.history);
@@ -2445,7 +2487,7 @@ $('deleteLastBtn').addEventListener('click',()=>{if(!state.races.length){$('mana
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(btn.dataset.view).classList.add('active');if(btn.dataset.view==='backtestView')renderBacktest();else if(btn.dataset.view!=='inputView')renderDashboard()}));
 $('backtestBtn').addEventListener('click',renderBacktest);
 $('clearBtn').addEventListener('click',()=>{$('raw').value='';$('preview').innerHTML='';$('saveReceipt').style.display='none';$('saveReceipt').textContent='';parsed=null;$('saveBtn').disabled=true;setStatus('入力欄だけ消しました')});
-(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.94 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
+(function boot(){const y=localStorage.getItem(YEAR_KEY)||new Date().getFullYear();$('year').value=y;$('year').addEventListener('change',e=>localStorage.setItem(YEAR_KEY,e.target.value));setStatus('✓ クリーン版 v4.95 起動。横長の馬柱表から馬名・騎手・調教師・5走を直接読み取ります。','ok');renderDashboard();void initAutoJsonBackup()})();
 </script>
 </body>
 </html>
